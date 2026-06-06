@@ -14,13 +14,12 @@
     }
 })();
 
-// Прогрів голосів
 window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 
 // ==========================================
 // 1. НАЛАШТУВАННЯ ТА ЗМІННІ СТАНУ
 // ==========================================
-console.log("Запуск app.js: Версія з командою екстреного скидання 'Дуся слухай'!");
+console.log("Запуск app.js: Версія для ТЕЛЕФОНУ (Негаснучий екран, великі цифри, анти-фантом)!");
 
 const speedElement = document.getElementById('speed-display');
 const statusElement = document.getElementById('status-text');
@@ -40,9 +39,10 @@ let currentMood = "весела, дружня та турботлива дівч
 let said55 = false;
 let said70 = false;
 let said100 = false;
-
-// Змінна для блокування старих відповідей ШІ при перезапуску
 let currentAiRequestTime = 0; 
+
+// Змінна для блокування екрану
+let wakeLock = null;
 
 // ==========================================
 // 2. ІНТЕРФЕЙС ТА НАЛАШТУВАННЯ
@@ -52,6 +52,13 @@ window.addEventListener('DOMContentLoaded', () => {
         const savedKey = localStorage.getItem('gemini_api_key');
         if (savedKey) apiKeyInput.value = savedKey; 
     } catch (e) { }
+
+    // ЗБІЛЬШУЄМО ЦИФРИ ШВИДКОСТІ В 3 РАЗИ
+    if (speedElement) {
+        speedElement.style.fontSize = "25vh"; // Динамічний гігантський розмір (25% від висоти екрана)
+        speedElement.style.lineHeight = "1.2";
+        speedElement.style.fontWeight = "900";
+    }
 
     let ytFrame = document.getElementById('dusya-youtube-player');
     if (!ytFrame) {
@@ -75,11 +82,11 @@ window.addEventListener('DOMContentLoaded', () => {
         speedOverlay.style.top = "20px";
         speedOverlay.style.right = "20px";
         speedOverlay.style.zIndex = "2000"; 
-        speedOverlay.style.backgroundColor = "rgba(0, 0, 0, 0.6)";
+        speedOverlay.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
         speedOverlay.style.color = "#00FF00"; 
-        speedOverlay.style.padding = "10px 20px";
-        speedOverlay.style.borderRadius = "10px";
-        speedOverlay.style.fontSize = "28px";
+        speedOverlay.style.padding = "15px 25px";
+        speedOverlay.style.borderRadius = "15px";
+        speedOverlay.style.fontSize = "40px"; // Більший віджет швидкості для відео
         speedOverlay.style.fontWeight = "bold";
         speedOverlay.style.fontFamily = "sans-serif";
         speedOverlay.style.pointerEvents = "none"; 
@@ -104,6 +111,13 @@ saveSettingsBtn.addEventListener('click', () => {
     }
 });
 
+// Відновлення блокування екрану, якщо водій згорнув і розгорнув браузер
+document.addEventListener('visibilitychange', async () => {
+    if (wakeLock !== null && document.visibilityState === 'visible') {
+        try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e) {}
+    }
+});
+
 // ==========================================
 // 3. СИНТЕЗ МОВЛЕННЯ 
 // ==========================================
@@ -116,7 +130,6 @@ function speak(text) {
 
         const voices = window.speechSynthesis.getVoices();
         let bestVoice = voices.find(v => v.lang.includes('uk'));
-        
         if (!bestVoice) bestVoice = voices.find(v => v.lang.includes('ru') && (v.name.toLowerCase().includes('female') || v.name.includes('Google') || v.name.includes('Milena')));
         if (!bestVoice) bestVoice = voices.find(v => v.lang.includes('ru'));
 
@@ -126,7 +139,7 @@ function speak(text) {
             if (isListening) {
                 try {
                     recognition.start();
-                    statusElement.innerText = "Дуся: Слухаю... (Скажіть: Дуся...)";
+                    statusElement.innerText = "Дуся: Слухаю...";
                 } catch(e) { }
             }
         };
@@ -142,7 +155,7 @@ function speak(text) {
 }
 
 // ==========================================
-// 4. КЕРУВАННЯ РЕЖИМАМИ YOUTUBE ТА РАДІО
+// 4. КЕРУВАННЯ РЕЖИМАМИ YOUTUBE 
 // ==========================================
 function setYouTubeMode(mode, query = null) {
     const ytFrame = document.getElementById('dusya-youtube-player');
@@ -178,7 +191,7 @@ function setYouTubeMode(mode, query = null) {
 }
 
 // ==========================================
-// 5. ЗВ'ЯЗОК З ШІ GEMINI 2.5 FLASH 
+// 5. ЗВ'ЯЗОК З ШІ
 // ==========================================
 async function askDusyaAI(userQuestion) {
     let apiKey = localStorage.getItem('gemini_api_key');
@@ -188,14 +201,10 @@ async function askDusyaAI(userQuestion) {
     const currentTime = new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
     const currentDate = new Date().toLocaleDateString('uk-UA');
     
-    const systemInstruction = `Ти - автомобільний голосовий помічник Дуся. 
-    Час: ${currentTime}, дата: ${currentDate}. Якщо спитають - називай цей час.
-    Твій настрій: ${currentMood}. Пам'ятай: ${savedMemory}.
-    Відповідай дуже коротко. 
-    ВАЖЛИВІ КОМАНДИ ДЛЯ ЕКРАНУ:
-    1. Якщо водій просить конкретне РАДІО (наприклад: радіо рокс, хіт фм, люкс фм тощо) - ОБОВ'ЯЗКОВО почни з тегу [RADIO: назва радіо].
-    2. Якщо просить загальну МУЗИКУ (співака, плейліст, ретро) фоном - ОБОВ'ЯЗКОВО почни з тегу [PLAY: запит].
-    3. Якщо каже "ПОДИВИТИСЬ", просить відео чи ютуб на весь екран - ОБОВ'ЯЗКОВО почни з тегу [WATCH: запит].`;
+    const systemInstruction = `Ти - автомобільний голосовий помічник Дуся. Час: ${currentTime}. Пам'ятай: ${savedMemory}. Відповідай дуже коротко. 
+    1. РАДІО - тег [RADIO: назва радіо].
+    2. МУЗИКА - тег [PLAY: запит].
+    3. ВІДЕО на весь екран - тег [WATCH: запит].`;
 
     try {
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
@@ -240,51 +249,33 @@ if (SpeechRecognition) {
     recognition.interimResults = false;
 
     recognition.onresult = async (event) => {
+        // ЗАХИСТ 1: Якщо Дуся зараз говорить, ігноруємо все, щоб вона не почула саму себе!
+        if (window.speechSynthesis.speaking) return;
+
         const last = event.results.length - 1;
         const transcript = event.results[last][0].transcript.toLowerCase().trim();
         console.log("Почуто: ", transcript);
 
-        // --- ЕКСТРЕНЕ СКИДАННЯ (HARD RESET) ---
+        // ЕКСТРЕНЕ СКИДАННЯ
         if (transcript === "дуся слухай" || transcript.includes("дуся слухай")) {
-            console.log("Екстрене скидання команд!");
-            window.speechSynthesis.cancel(); // Обірвати всі старі озвучки
-            currentAiRequestTime = Date.now(); // Змінюємо мітку часу, щоб проігнорувати старі відповіді від ШІ
-            
+            window.speechSynthesis.cancel(); 
+            currentAiRequestTime = Date.now(); 
             playBeep();
             statusElement.innerText = "Дуся: Слухаю (Оновлено)...";
-            dusyaBtn.style.backgroundColor = "#00FF00"; 
-            dusyaBtn.style.boxShadow = "0 0 20px #00FF00";
-            
-            // Якщо розпізнавання зупинилось через зависання, смикаємо його
             try { recognition.start(); } catch(e) {}
             return;
         }
 
-        // КОМАНДИ КЕРУВАННЯ ЕКРАНОМ
-        if (transcript.includes("заховай ютуб") || transcript.includes("сховай ютуб") || transcript.includes("закрий ютуб") || transcript.includes("вимкни радіо") || transcript.includes("вимкни відео")) {
+        if (transcript.includes("заховай ютуб") || transcript.includes("вимкни відео")) {
             setYouTubeMode('hide');
             speak("Вимикаю.");
             return;
         }
 
-        if (transcript.includes("заспокойся") || transcript.includes("стоп")) {
-            isDusiaMuted = true;
-            statusElement.innerText = "Дуся: Режим тиші";
-            speak("Мовчу.");
-            return;
-        }
-        
-        if (transcript.includes("працюй")) {
-            isDusiaMuted = false;
-            statusElement.innerText = "Дуся: Контроль увімкнено";
-            speak("Слідкую за дорогою.");
-            return;
-        }
-
-        if (transcript.startsWith("дуся")) {
+        // ЗАХИСТ 2: Більш жорстка перевірка на ім'я, щоб не було фантомних "плімів" від шуму дороги
+        if (transcript === "дуся" || transcript.startsWith("дуся ") || transcript.startsWith("дуся,")) {
             playBeep();
             dusyaBtn.style.backgroundColor = "#FFA500"; 
-            dusyaBtn.style.boxShadow = "0 0 20px #FFA500";
             
             const cleanQuery = transcript.replace("дуся", "").trim();
             
@@ -292,48 +283,29 @@ if (SpeechRecognition) {
                 statusElement.innerText = "Дуся: Думаю...";
                 recognition.stop(); 
                 
-                // Фіксуємо час цього запиту
                 const thisRequestTime = Date.now();
                 currentAiRequestTime = thisRequestTime;
 
                 const aiResponse = await askDusyaAI(cleanQuery);
                 
-                // Перевірка: чи не було команди "Дуся слухай", поки ШІ думав?
-                if (currentAiRequestTime !== thisRequestTime) {
-                    console.log("Стару відповідь відхилено через команду 'Дуся слухай'.");
-                    return; // Просто відкидаємо запізнілу відповідь
-                }
+                if (currentAiRequestTime !== thisRequestTime) return; // Відкидаємо старе
                 
                 dusyaBtn.style.backgroundColor = "#00FF00"; 
-                dusyaBtn.style.boxShadow = "0 0 20px #00FF00";
                 
                 if (aiResponse.includes("[RADIO:")) {
                     const match = aiResponse.match(/\[RADIO:\s*(.*?)\s*\]/);
-                    if (match && match[1]) {
-                        const radioQuery = `${match[1]} прямий ефір радіо`;
-                        setYouTubeMode('bottom', radioQuery); 
-                    }
-                    const cleanText = aiResponse.replace(/\[RADIO:.*?\]/, "").trim();
-                    statusElement.innerText = "Дуся: Налаштовую радіо...";
-                    speak(cleanText);
+                    if (match && match[1]) setYouTubeMode('bottom', `${match[1]} прямий ефір радіо`); 
+                    speak(aiResponse.replace(/\[RADIO:.*?\]/, "").trim());
                 }
                 else if (aiResponse.includes("[WATCH:")) {
                     const match = aiResponse.match(/\[WATCH:\s*(.*?)\s*\]/);
-                    if (match && match[1]) {
-                        setYouTubeMode('fullscreen', match[1]); 
-                    }
-                    const cleanText = aiResponse.replace(/\[WATCH:.*?\]/, "").trim();
-                    statusElement.innerText = "Дуся: Відео на весь екран...";
-                    speak(cleanText);
+                    if (match && match[1]) setYouTubeMode('fullscreen', match[1]); 
+                    speak(aiResponse.replace(/\[WATCH:.*?\]/, "").trim());
                 } 
                 else if (aiResponse.includes("[PLAY:")) {
                     const match = aiResponse.match(/\[PLAY:\s*(.*?)\s*\]/);
-                    if (match && match[1]) {
-                        setYouTubeMode('bottom', match[1]); 
-                    }
-                    const cleanText = aiResponse.replace(/\[PLAY:.*?\]/, "").trim();
-                    statusElement.innerText = "Дуся: Вмикаю музику...";
-                    speak(cleanText);
+                    if (match && match[1]) setYouTubeMode('bottom', match[1]); 
+                    speak(aiResponse.replace(/\[PLAY:.*?\]/, "").trim());
                 } 
                 else {
                     statusElement.innerText = "Дуся: Говорю...";
@@ -342,7 +314,6 @@ if (SpeechRecognition) {
             } else {
                 statusElement.innerText = "Дуся: Слухаю...";
                 dusyaBtn.style.backgroundColor = "#00FF00"; 
-                dusyaBtn.style.boxShadow = "0 0 20px #00FF00";
                 speak("Слухаю");
             }
         }
@@ -356,15 +327,24 @@ if (SpeechRecognition) {
 }
 
 // ==========================================
-// 7. КНОПКА ТА GPS
+// 7. КНОПКА ТА GPS ТА ЕКРАН
 // ==========================================
-dusyaBtn.addEventListener('click', () => {
+dusyaBtn.addEventListener('click', async () => {
     if (!isListening) {
         isListening = true;
         dusyaBtn.classList.add('active');
         dusyaBtn.innerText = "Дуся Активна";
         statusElement.innerText = "Дуся: Слухаю...";
         keepAliveAudio.play().catch(e => {});
+        
+        // ВМИКАЄМО БЛОКУВАННЯ ЕКРАНУ, ЩОБ ВІН НЕ ГАС
+        try {
+            if ('wakeLock' in navigator) {
+                wakeLock = await navigator.wakeLock.request('screen');
+                console.log("Екран заблоковано від вимкнення.");
+            }
+        } catch (err) { console.log("Помилка блокування екрану:", err); }
+
         speak("Готова.");
     } else {
         isListening = false;
@@ -375,6 +355,12 @@ dusyaBtn.addEventListener('click', () => {
         if (recognition) recognition.stop();
         keepAliveAudio.pause();
         setYouTubeMode('hide');
+        
+        // ЗВІЛЬНЯЄМО ЕКРАН
+        if (wakeLock !== null) {
+            wakeLock.release();
+            wakeLock = null;
+        }
     }
 });
 
@@ -382,7 +368,7 @@ if (navigator.geolocation) {
     navigator.geolocation.watchPosition(
         function(position) {
             let speedKmh = Math.round(position.coords.speed * 3.6);
-            if (speedKmh > 0) {
+            if (speedKmh >= 0) {
                 speedElement.innerText = speedKmh;
                 const overlay = document.getElementById('dusya-speed-overlay');
                 if (overlay) overlay.innerText = speedKmh + " км/год";
@@ -390,7 +376,6 @@ if (navigator.geolocation) {
             if (!isDusiaMuted) {
                 if (speedKmh >= 100 && !said100) { speak("Не гони."); said100 = true; } 
                 else if (speedKmh >= 70 && speedKmh < 100 && !said70) { speak("Пригальмуй."); said70 = true; } 
-                else if (speedKmh >= 55 && speedKmh < 70 && !said55) { speak("Ми за містом?"); said55 = true; }
             }
             if (speedKmh < 50) { said55 = false; said70 = false; said100 = false; }
         },
