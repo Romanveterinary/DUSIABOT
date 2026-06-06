@@ -1,0 +1,136 @@
+/* Глобальні налаштування екрана */
+body {
+    margin: 0;
+    padding: 0;
+    background-color: #000000; 
+    color: #FFFFFF; 
+    font-family: 'Arial', sans-serif;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* Кнопка шестірні */
+#settings-btn {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: none;
+    border: none;
+    font-size: 35px;
+    cursor: pointer;
+    opacity: 0.5;
+    transition: opacity 0.3s;
+}
+
+#settings-btn:hover {
+    opacity: 1;
+}
+
+/* Блок спідометра */
+#speed-container {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+#speed-display {
+    font-size: 180px; 
+    font-weight: bold;
+    line-height: 1;
+}
+
+#unit {
+    font-size: 24px;
+    color: #888888; 
+}
+
+#status-text {
+    font-size: 20px;
+    color: #00FF00; 
+    margin-bottom: 40px;
+    height: 30px;
+    text-align: center;
+    max-width: 90%;
+}
+
+#dusya-btn {
+    background-color: #222222;
+    color: #00FF00;
+    border: 2px solid #00FF00;
+    border-radius: 50px;
+    padding: 18px 45px;
+    font-size: 22px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+#dusya-btn.active {
+    background-color: #00FF00;
+    color: #000000;
+    box-shadow: 0 0 20px #00FF00; 
+}
+
+/* ========================================= */
+/* СТИЛІ МОДАЛЬНОГО ВІКНА НАЛАШТУВАНЬ        */
+/* ========================================= */
+#settings-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.85); /* Затемнення фону */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+#settings-modal.hidden {
+    display: none;
+}
+
+.modal-content {
+    background-color: #1a1a1a;
+    padding: 30px;
+    border-radius: 15px;
+    border: 2px solid #00FF00;
+    text-align: center;
+    width: 80%;
+    max-width: 400px;
+}
+
+#api-key-input {
+    width: 90%;
+    padding: 12px;
+    margin: 20px 0;
+    font-size: 16px;
+    border-radius: 8px;
+    border: 1px solid #555;
+    background-color: #333;
+    color: white;
+}
+
+.modal-buttons button {
+    padding: 10px 20px;
+    margin: 5px;
+    font-size: 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    border: none;
+    font-weight: bold;
+}
+
+#save-key-btn {
+    background-color: #00FF00;
+    color: black;
+}
+
+#close-modal-btn {
+    background-color: #555;
+    color: white;
+}

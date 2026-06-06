@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Дуся - Автоасистент</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Кнопка налаштувань у кутку -->
+    <button id="settings-btn" title="Налаштування API">⚙️</button>
+
+    <!-- Спідометр -->
+    <div id="speed-container">
+        <div id="speed-display">0</div>
+        <div id="unit">км/год</div>
+    </div>
+    
+    <!-- Статус та управління -->
+    <div id="status-text">Натисніть кнопку для старту</div>
+    <button id="dusya-btn">Запустити Дусю</button>
+
+    <!-- Модальне вікно для вводу ключа (приховане за замовчуванням) -->
+    <div id="settings-modal" class="hidden">
+        <div class="modal-content">
+            <h2>Налаштування</h2>
+            <p>Введіть ваш ключ Gemini API:</p>
+            <input type="password" id="api-key-input" placeholder="Вставте ключ сюди...">
+            <div class="modal-buttons">
+                <button id="save-settings-btn">Зберегти</button>
+                <button id="close-settings-btn">Закрити</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Прихований контейнер для YouTube плеєра -->
+    <div id="youtube-player" style="display: none;"></div>
+    
+    <!-- Спеціальний беззвучний трек проти засипання -->
+    <audio id="keep-alive-audio" loop src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"></audio>
+
+    <script src="app.js"></script>
+    <script src="https://www.youtube.com/iframe_api"></script>
+</body>
+</html>
