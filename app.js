@@ -19,7 +19,7 @@ window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices(
 // ==========================================
 // 1. НАЛАШТУВАННЯ ТА ЗМІННІ СТАНУ
 // ==========================================
-console.log("Запуск app.js: ВІДНОВЛЕНО YOUTUBE, плюс погода і кольори!");
+console.log("Запуск app.js: Нові стоп-слова, кольори, погода на завтра та зовнішній Ютуб!");
 
 const speedElement = document.getElementById('speed-display');
 const statusElement = document.getElementById('status-text');
@@ -45,7 +45,6 @@ let wakeLock = null;
 let currentLat = null;
 let currentLon = null;
 
-// ПЛЕЄР ДЛЯ ПРЯМИХ РАДІОСТАНЦІЙ
 let liveRadioPlayer = new Audio();
 const radioStations = {
     "рокс": "https://online.radioroks.ua/RadioROKS",
@@ -73,41 +72,6 @@ window.addEventListener('DOMContentLoaded', () => {
         speedElement.style.fontSize = "25vh"; 
         speedElement.style.lineHeight = "1.2";
         speedElement.style.fontWeight = "900";
-    }
-
-    let ytFrame = document.getElementById('dusya-youtube-player');
-    if (!ytFrame) {
-        ytFrame = document.createElement('iframe');
-        ytFrame.id = 'dusya-youtube-player';
-        ytFrame.style.width = "100%";
-        ytFrame.style.border = "none";
-        ytFrame.style.position = "fixed";
-        ytFrame.style.left = "0";
-        ytFrame.style.backgroundColor = "#000"; 
-        ytFrame.style.display = "none"; 
-        ytFrame.setAttribute('allow', 'autoplay; encrypted-media; fullscreen');
-        document.body.appendChild(ytFrame);
-    }
-
-    let speedOverlay = document.getElementById('dusya-speed-overlay');
-    if (!speedOverlay) {
-        speedOverlay = document.createElement('div');
-        speedOverlay.id = 'dusya-speed-overlay';
-        speedOverlay.style.position = "fixed";
-        speedOverlay.style.top = "20px";
-        speedOverlay.style.right = "20px";
-        speedOverlay.style.zIndex = "2000"; 
-        speedOverlay.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
-        speedOverlay.style.color = "#00FF00"; 
-        speedOverlay.style.padding = "15px 25px";
-        speedOverlay.style.borderRadius = "15px";
-        speedOverlay.style.fontSize = "40px"; 
-        speedOverlay.style.fontWeight = "bold";
-        speedOverlay.style.fontFamily = "sans-serif";
-        speedOverlay.style.pointerEvents = "none"; 
-        speedOverlay.style.display = "none";
-        speedOverlay.innerText = "0 км/год";
-        document.body.appendChild(speedOverlay);
     }
 });
 
@@ -138,7 +102,6 @@ document.addEventListener('visibilitychange', async () => {
 function speak(text) {
     if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel(); 
-
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = 'uk-UA';
 
@@ -149,17 +112,8 @@ function speak(text) {
 
         if (bestVoice) utterance.voice = bestVoice;
 
-        utterance.onend = () => {
-            if (isListening) {
-                try {
-                    recognition.start();
-                    statusElement.innerText = "Дуся: Слухаю...";
-                } catch(e) { }
-            }
-        };
-        utterance.onerror = () => {
-            if (isListening) { try { recognition.start(); } catch(e) { } }
-        };
+        utterance.onend = () => { if (isListening) try { recognition.start(); statusElement.innerText = "Дуся: Слухаю..."; } catch(e) { } };
+        utterance.onerror = () => { if (isListening) try { recognition.start(); } catch(e) { } };
 
         window.speechSynthesis.speak(utterance);
     }
@@ -168,34 +122,10 @@ function speak(text) {
 // ==========================================
 // 4. КЕРУВАННЯ МУЛЬТИМЕДІА ТА ПОГОДОЮ
 // ==========================================
-function setYouTubeMode(mode, query = null) {
-    const ytFrame = document.getElementById('dusya-youtube-player');
-    const speedOverlay = document.getElementById('dusya-speed-overlay');
-    if (!ytFrame || !speedOverlay) return;
-
-    if (mode === 'fullscreen') {
-        liveRadioPlayer.pause(); 
-        ytFrame.style.display = "block";
-        ytFrame.style.height = "100vh"; 
-        ytFrame.style.top = "0";
-        ytFrame.style.zIndex = "1500"; 
-        speedOverlay.style.display = "block"; 
-    } else if (mode === 'bottom') {
-        liveRadioPlayer.pause();
-        ytFrame.style.display = "block";
-        ytFrame.style.height = "35vh"; 
-        ytFrame.style.top = "auto";
-        ytFrame.style.bottom = "0";
-        ytFrame.style.zIndex = "1000";
-        speedOverlay.style.display = "none"; 
-    } else if (mode === 'hide') {
-        ytFrame.style.display = "none";
-        ytFrame.src = "";
-        speedOverlay.style.display = "none";
-    }
-    if (query) {
-        ytFrame.src = `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(query)}&autoplay=0`;
-    }
+function openYouTubeApp(query) {
+    liveRadioPlayer.pause();
+    // Відкриваємо ютуб у новій вкладці (на телефоні це часто відкриває сам додаток YouTube)
+    window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, '_blank');
 }
 
 function playLiveRadio(stationName) {
@@ -205,7 +135,6 @@ function playLiveRadio(stationName) {
         if (lowerName.includes(key)) { streamUrl = radioStations[key]; break; }
     }
     if (streamUrl) {
-        setYouTubeMode('hide'); 
         liveRadioPlayer.src = streamUrl;
         liveRadioPlayer.play().catch(e => {});
         return true;
@@ -229,16 +158,20 @@ async function handleWeatherCommand(city) {
         } catch(e) { speak("Помилка пошуку міста."); return; }
     }
 
-    if (!lat || !lon) { speak("Не можу визначити координати."); return; }
+    if (!lat || !lon) { speak("Не можу визначити координати. Увімкніть GPS."); return; }
 
     try {
-        let wRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=auto`);
+        // Додано daily параметр для погоди на завтра (forecast_days=2)
+        let wRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=2`);
         let wData = await wRes.json();
-        if (wData && wData.current) {
-            let temp = Math.round(wData.current.temperature_2m);
+        
+        if (wData && wData.current && wData.daily) {
+            let tempNow = Math.round(wData.current.temperature_2m);
             let code = wData.current.weather_code;
-            let desc = "гарна погода";
+            let tempMinTom = Math.round(wData.daily.temperature_2m_min[1]);
+            let tempMaxTom = Math.round(wData.daily.temperature_2m_max[1]);
             
+            let desc = "гарна погода";
             if (code === 0) desc = "ясно і сонячно";
             else if (code >= 1 && code <= 3) desc = "мінлива хмарність";
             else if (code === 45 || code === 48) desc = "туманно";
@@ -248,7 +181,7 @@ async function handleWeatherCommand(city) {
             else if (code >= 80 && code <= 82) desc = "короткочасна злива";
             else if (code >= 95) desc = "гроза";
 
-            speak(`У ${cityName} зараз ${temp} градусів, ${desc}.`);
+            speak(`У ${cityName} зараз ${tempNow} градусів, ${desc}. На завтра обіцяють від ${tempMinTom} до ${tempMaxTom} градусів.`);
         } else { speak("Не вдалося завантажити дані."); }
     } catch(e) { speak("Проблеми з метеосервером."); }
 }
@@ -264,13 +197,11 @@ async function askDusyaAI(userQuestion) {
     
     const systemInstruction = `Ти - автомобільний голосовий помічник Дуся. Час: ${currentTime}. Пам'ятай: ${savedMemory}. Відповідай дуже коротко. 
     1. РАДІО - ОБОВ'ЯЗКОВО почни з тегу [RADIO: назва радіо].
-    2. МУЗИКА фоном - ОБОВ'ЯЗКОВО почни з тегу [PLAY: запит].
-    3. ВІДЕО або ЮТУБ на весь екран - ОБОВ'ЯЗКОВО почни з тегу [WATCH: запит].`;
+    2. МУЗИКА чи ВІДЕО на Ютуб - ОБОВ'ЯЗКОВО почни з тегу [WATCH: запит].`;
     
     try {
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
+            method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ contents: [{ parts: [{ text: systemInstruction + "\nВодій: " + userQuestion }] }] })
         });
         const data = await response.json();
@@ -307,37 +238,33 @@ if (SpeechRecognition) {
         const transcript = event.results[last][0].transcript.toLowerCase().trim();
         console.log("Почуто: ", transcript);
 
-        // КОМАНДА ЗАВЕРШИТИ
-        if (transcript === "завершити" || transcript.includes("завершити") || transcript.includes("вимкни все")) {
-            setYouTubeMode('hide'); liveRadioPlayer.pause(); liveRadioPlayer.src = "";
+        // ЖОРСТКІ СТОП-СЛОВА
+        if (transcript.includes("завершити") || transcript.includes("хватить") || transcript.includes("закрийся") || transcript.includes("не пизди") || transcript.includes("вимкни все")) {
+            liveRadioPlayer.pause(); liveRadioPlayer.src = "";
             window.speechSynthesis.cancel(); playBeep();
             statusElement.innerText = "Дуся: Слухаю..."; return;
         }
 
-        // ЕКСТРЕНЕ СКИДАННЯ
-        if (transcript === "дуся слухай" || transcript.includes("дуся слухай")) {
+        if (transcript.includes("дуся слухай")) {
             window.speechSynthesis.cancel(); currentAiRequestTime = Date.now(); playBeep();
             statusElement.innerText = "Дуся: Слухаю (Оновлено)...";
             try { recognition.start(); } catch(e) {} return;
         }
 
-        // МИТТЄВА ЗМІНА КОЛЬОРУ ЦИФР
+        // ДОДАНІ НОВІ КОЛЬОРИ
         if (transcript.includes("колір червоний")) { speedElement.style.color = "red"; recognition.stop(); speak("Зробила червоним."); return; }
         if (transcript.includes("колір зелений")) { speedElement.style.color = "#00FF00"; recognition.stop(); speak("Встановила зелений."); return; }
         if (transcript.includes("колір жовтий")) { speedElement.style.color = "yellow"; recognition.stop(); speak("Готово, колір жовтий."); return; }
         if (transcript.includes("колір білий")) { speedElement.style.color = "white"; recognition.stop(); speak("Змінила на білий."); return; }
+        if (transcript.includes("колір синій")) { speedElement.style.color = "#00BFFF"; recognition.stop(); speak("Колір синій."); return; }
+        if (transcript.includes("колір коричневий")) { speedElement.style.color = "#8B4513"; recognition.stop(); speak("Зробила коричневим."); return; }
 
-        // МИТТЄВА ПОГОДА
         if (transcript.includes("погода")) {
             let city = null;
             let match = transcript.match(/погода\s+(?:в|у)\s+([а-яєіїґ-]+)/i);
             if (match) city = match[1];
             handleWeatherCommand(city);
             return;
-        }
-
-        if (transcript.includes("заховай ютуб") || transcript.includes("вимкни відео") || transcript.includes("вимкни радіо")) {
-            setYouTubeMode('hide'); liveRadioPlayer.pause(); recognition.stop(); speak("Вимикаю."); return;
         }
 
         if (transcript === "дуся" || transcript.startsWith("дуся ") || transcript.startsWith("дуся,")) {
@@ -355,15 +282,14 @@ if (SpeechRecognition) {
                 
                 dusyaBtn.style.backgroundColor = "#00FF00"; 
 
-                // === ВІДНОВЛЕНА ЛОГІКА YOUTUBE ТА РАДІО ===
                 if (aiResponse.includes("[RADIO:")) {
                     const match = aiResponse.match(/\[RADIO:\s*(.*?)\s*\]/);
                     let cleanText = aiResponse.replace(/\[RADIO:.*?\]/, "").trim();
                     if (match && match[1]) {
                         let success = playLiveRadio(match[1]);
                         if (!success) {
-                            cleanText = "Шукаю станцію на Ютубі. Натисніть плей на екрані.";
-                            setYouTubeMode('bottom', `${match[1]} прямий ефір радіо`);
+                            cleanText = "Шукаю станцію на Ютубі.";
+                            openYouTubeApp(`${match[1]} прямий ефір радіо`);
                         }
                     }
                     statusElement.innerText = "Дуся: Вмикаю радіо...";
@@ -371,22 +297,14 @@ if (SpeechRecognition) {
                 }
                 else if (aiResponse.includes("[WATCH:")) {
                     const match = aiResponse.match(/\[WATCH:\s*(.*?)\s*\]/);
-                    if (match && match[1]) setYouTubeMode('fullscreen', match[1]); 
-                    statusElement.innerText = "Дуся: Відео на весь екран...";
-                    speak(aiResponse.replace(/\[WATCH:.*?\]/, "").trim() + ". Не забудьте натиснути плей на екрані.");
-                } 
-                else if (aiResponse.includes("[PLAY:")) {
-                    const match = aiResponse.match(/\[PLAY:\s*(.*?)\s*\]/);
-                    if (match && match[1]) setYouTubeMode('bottom', match[1]); 
-                    statusElement.innerText = "Дуся: Вмикаю музику...";
-                    speak(aiResponse.replace(/\[PLAY:.*?\]/, "").trim() + ". Натисніть плей.");
+                    if (match && match[1]) openYouTubeApp(match[1]); 
+                    statusElement.innerText = "Дуся: Відкриваю Ютуб...";
+                    speak(aiResponse.replace(/\[WATCH:.*?\]/, "").trim());
                 } 
                 else {
                     statusElement.innerText = "Дуся: Говорю...";
                     speak(aiResponse);
                 }
-                // ==========================================
-
             } else {
                 statusElement.innerText = "Дуся: Слухаю...";
                 dusyaBtn.style.backgroundColor = "#00FF00"; 
@@ -396,11 +314,7 @@ if (SpeechRecognition) {
         }
     };
 
-    recognition.onend = () => {
-        if (isListening && !window.speechSynthesis.speaking) {
-            try { recognition.start(); } catch(e) {}
-        }
-    };
+    recognition.onend = () => { if (isListening && !window.speechSynthesis.speaking) try { recognition.start(); } catch(e) {} };
 }
 
 // ==========================================
@@ -416,7 +330,7 @@ dusyaBtn.addEventListener('click', async () => {
         isListening = false; dusyaBtn.classList.remove('active'); dusyaBtn.innerText = "Запустити Дусю";
         statusElement.innerText = "Вимкнена"; window.speechSynthesis.cancel();
         if (recognition) recognition.stop(); keepAliveAudio.pause();
-        setYouTubeMode('hide'); liveRadioPlayer.pause(); liveRadioPlayer.src = "";
+        liveRadioPlayer.pause(); liveRadioPlayer.src = "";
         if (wakeLock !== null) { wakeLock.release(); wakeLock = null; }
     }
 });
@@ -424,14 +338,9 @@ dusyaBtn.addEventListener('click', async () => {
 if (navigator.geolocation) {
     navigator.geolocation.watchPosition(
         function(position) {
-            currentLat = position.coords.latitude;
-            currentLon = position.coords.longitude;
+            currentLat = position.coords.latitude; currentLon = position.coords.longitude;
             let speedKmh = Math.round(position.coords.speed * 3.6);
-            if (speedKmh >= 0) {
-                speedElement.innerText = speedKmh;
-                const overlay = document.getElementById('dusya-speed-overlay');
-                if (overlay) overlay.innerText = speedKmh + " км/год";
-            }
+            if (speedKmh >= 0) { speedElement.innerText = speedKmh; }
             if (!isDusiaMuted) {
                 if (speedKmh >= 100 && !said100) { speak("Не гони."); said100 = true; } 
                 else if (speedKmh >= 70 && speedKmh < 100 && !said70) { speak("Пригальмуй."); said70 = true; } 
