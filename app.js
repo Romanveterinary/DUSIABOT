@@ -19,7 +19,7 @@ window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices(
 // ==========================================
 // 1. НАЛАШТУВАННЯ ТА ЗМІННІ СТАНУ
 // ==========================================
-console.log("Запуск app.js: Версія з командою 'Завершити' та прямим радіо!");
+console.log("Запуск app.js: ВІДНОВЛЕНО YOUTUBE, плюс погода і кольори!");
 
 const speedElement = document.getElementById('speed-display');
 const statusElement = document.getElementById('status-text');
@@ -41,6 +41,9 @@ let said70 = false;
 let said100 = false;
 let currentAiRequestTime = 0; 
 let wakeLock = null;
+
+let currentLat = null;
+let currentLon = null;
 
 // ПЛЕЄР ДЛЯ ПРЯМИХ РАДІОСТАНЦІЙ
 let liveRadioPlayer = new Audio();
@@ -154,11 +157,8 @@ function speak(text) {
                 } catch(e) { }
             }
         };
-
         utterance.onerror = () => {
-            if (isListening) {
-                try { recognition.start(); } catch(e) { }
-            }
+            if (isListening) { try { recognition.start(); } catch(e) { } }
         };
 
         window.speechSynthesis.speak(utterance);
@@ -166,12 +166,11 @@ function speak(text) {
 }
 
 // ==========================================
-// 4. КЕРУВАННЯ МУЛЬТИМЕДІА
+// 4. КЕРУВАННЯ МУЛЬТИМЕДІА ТА ПОГОДОЮ
 // ==========================================
 function setYouTubeMode(mode, query = null) {
     const ytFrame = document.getElementById('dusya-youtube-player');
     const speedOverlay = document.getElementById('dusya-speed-overlay');
-    
     if (!ytFrame || !speedOverlay) return;
 
     if (mode === 'fullscreen') {
@@ -179,11 +178,9 @@ function setYouTubeMode(mode, query = null) {
         ytFrame.style.display = "block";
         ytFrame.style.height = "100vh"; 
         ytFrame.style.top = "0";
-        ytFrame.style.bottom = "auto";
         ytFrame.style.zIndex = "1500"; 
         speedOverlay.style.display = "block"; 
-    } 
-    else if (mode === 'bottom') {
+    } else if (mode === 'bottom') {
         liveRadioPlayer.pause();
         ytFrame.style.display = "block";
         ytFrame.style.height = "35vh"; 
@@ -191,13 +188,11 @@ function setYouTubeMode(mode, query = null) {
         ytFrame.style.bottom = "0";
         ytFrame.style.zIndex = "1000";
         speedOverlay.style.display = "none"; 
-    } 
-    else if (mode === 'hide') {
+    } else if (mode === 'hide') {
         ytFrame.style.display = "none";
         ytFrame.src = "";
         speedOverlay.style.display = "none";
     }
-
     if (query) {
         ytFrame.src = `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(query)}&autoplay=0`;
     }
@@ -207,18 +202,55 @@ function playLiveRadio(stationName) {
     let streamUrl = "";
     const lowerName = stationName.toLowerCase();
     for (let key in radioStations) {
-        if (lowerName.includes(key)) {
-            streamUrl = radioStations[key];
-            break;
-        }
+        if (lowerName.includes(key)) { streamUrl = radioStations[key]; break; }
     }
     if (streamUrl) {
         setYouTubeMode('hide'); 
         liveRadioPlayer.src = streamUrl;
-        liveRadioPlayer.play().catch(e => console.log("Браузер заблокував автоплей"));
+        liveRadioPlayer.play().catch(e => {});
         return true;
     }
     return false; 
+}
+
+async function handleWeatherCommand(city) {
+    statusElement.innerText = "Дуся: Шукаю погоду...";
+    recognition.stop();
+    let lat = currentLat; let lon = currentLon; let cityName = "вашому місці перебування";
+
+    if (city) {
+        try {
+            let geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=uk`);
+            let geoData = await geoRes.json();
+            if (geoData.results && geoData.results.length > 0) {
+                lat = geoData.results[0].latitude; lon = geoData.results[0].longitude;
+                cityName = "місті " + geoData.results[0].name;
+            } else { speak(`Не змогла знайти місто ${city}.`); return; }
+        } catch(e) { speak("Помилка пошуку міста."); return; }
+    }
+
+    if (!lat || !lon) { speak("Не можу визначити координати."); return; }
+
+    try {
+        let wRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=auto`);
+        let wData = await wRes.json();
+        if (wData && wData.current) {
+            let temp = Math.round(wData.current.temperature_2m);
+            let code = wData.current.weather_code;
+            let desc = "гарна погода";
+            
+            if (code === 0) desc = "ясно і сонячно";
+            else if (code >= 1 && code <= 3) desc = "мінлива хмарність";
+            else if (code === 45 || code === 48) desc = "туманно";
+            else if (code >= 51 && code <= 55) desc = "мряка";
+            else if (code >= 61 && code <= 65) desc = "йде дощ";
+            else if (code >= 71 && code <= 75) desc = "йде сніг";
+            else if (code >= 80 && code <= 82) desc = "короткочасна злива";
+            else if (code >= 95) desc = "гроза";
+
+            speak(`У ${cityName} зараз ${temp} градусів, ${desc}.`);
+        } else { speak("Не вдалося завантажити дані."); }
+    } catch(e) { speak("Проблеми з метеосервером."); }
 }
 
 // ==========================================
@@ -227,28 +259,23 @@ function playLiveRadio(stationName) {
 async function askDusyaAI(userQuestion) {
     let apiKey = localStorage.getItem('gemini_api_key');
     if (!apiKey) return "Немає API ключа.";
-
     const savedMemory = localStorage.getItem('dusya_facts') || "Немає додаткових фактів.";
     const currentTime = new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
     
     const systemInstruction = `Ти - автомобільний голосовий помічник Дуся. Час: ${currentTime}. Пам'ятай: ${savedMemory}. Відповідай дуже коротко. 
-    1. РАДІО - тег [RADIO: назва радіо].
-    2. МУЗИКА фоном - тег [PLAY: запит].
-    3. ВІДЕО на весь екран - тег [WATCH: запит].`;
-
+    1. РАДІО - ОБОВ'ЯЗКОВО почни з тегу [RADIO: назва радіо].
+    2. МУЗИКА фоном - ОБОВ'ЯЗКОВО почни з тегу [PLAY: запит].
+    3. ВІДЕО або ЮТУБ на весь екран - ОБОВ'ЯЗКОВО почни з тегу [WATCH: запит].`;
+    
     try {
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: systemInstruction + "\nВодій: " + userQuestion }] }]
-            })
+            body: JSON.stringify({ contents: [{ parts: [{ text: systemInstruction + "\nВодій: " + userQuestion }] }] })
         });
         const data = await response.json();
         return data.candidates[0].content.parts[0].text;
-    } catch (error) {
-        return "Проблеми з інтернетом.";
-    }
+    } catch (error) { return "Проблеми з інтернетом."; }
 }
 
 // ==========================================
@@ -262,82 +289,80 @@ function playBeep() {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const oscillator = audioCtx.createOscillator();
         const gainNode = audioCtx.createGain();
-        oscillator.type = 'sine';
-        oscillator.frequency.value = 880; 
+        oscillator.type = 'sine'; oscillator.frequency.value = 880; 
         gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); 
-        oscillator.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-        oscillator.start();
-        oscillator.stop(audioCtx.currentTime + 0.15); 
+        oscillator.connect(gainNode); gainNode.connect(audioCtx.destination);
+        oscillator.start(); oscillator.stop(audioCtx.currentTime + 0.15); 
     } catch (e) {}
 }
 
 if (SpeechRecognition) {
     recognition = new SpeechRecognition();
-    recognition.lang = 'uk-UA';
-    recognition.continuous = true; 
-    recognition.interimResults = false;
+    recognition.lang = 'uk-UA'; recognition.continuous = true; recognition.interimResults = false;
 
     recognition.onresult = async (event) => {
-        if (window.speechSynthesis.speaking) return;
+        if (window.speechSynthesis.speaking) return; 
 
         const last = event.results.length - 1;
         const transcript = event.results[last][0].transcript.toLowerCase().trim();
         console.log("Почуто: ", transcript);
 
-        // --- КОМАНДА ДЛЯ ПОВНОГО СКИНЕННЯ ВСЬОГО МУЛЬТИМЕДІА ---
+        // КОМАНДА ЗАВЕРШИТИ
         if (transcript === "завершити" || transcript.includes("завершити") || transcript.includes("вимкни все")) {
-            setYouTubeMode('hide');
-            liveRadioPlayer.pause();
-            liveRadioPlayer.src = "";
-            window.speechSynthesis.cancel();
-            playBeep();
-            statusElement.innerText = "Дуся: Слухаю...";
-            return;
+            setYouTubeMode('hide'); liveRadioPlayer.pause(); liveRadioPlayer.src = "";
+            window.speechSynthesis.cancel(); playBeep();
+            statusElement.innerText = "Дуся: Слухаю..."; return;
         }
 
+        // ЕКСТРЕНЕ СКИДАННЯ
         if (transcript === "дуся слухай" || transcript.includes("дуся слухай")) {
-            window.speechSynthesis.cancel(); 
-            currentAiRequestTime = Date.now(); 
-            playBeep();
+            window.speechSynthesis.cancel(); currentAiRequestTime = Date.now(); playBeep();
             statusElement.innerText = "Дуся: Слухаю (Оновлено)...";
-            try { recognition.start(); } catch(e) {}
+            try { recognition.start(); } catch(e) {} return;
+        }
+
+        // МИТТЄВА ЗМІНА КОЛЬОРУ ЦИФР
+        if (transcript.includes("колір червоний")) { speedElement.style.color = "red"; recognition.stop(); speak("Зробила червоним."); return; }
+        if (transcript.includes("колір зелений")) { speedElement.style.color = "#00FF00"; recognition.stop(); speak("Встановила зелений."); return; }
+        if (transcript.includes("колір жовтий")) { speedElement.style.color = "yellow"; recognition.stop(); speak("Готово, колір жовтий."); return; }
+        if (transcript.includes("колір білий")) { speedElement.style.color = "white"; recognition.stop(); speak("Змінила на білий."); return; }
+
+        // МИТТЄВА ПОГОДА
+        if (transcript.includes("погода")) {
+            let city = null;
+            let match = transcript.match(/погода\s+(?:в|у)\s+([а-яєіїґ-]+)/i);
+            if (match) city = match[1];
+            handleWeatherCommand(city);
             return;
         }
 
-        if (transcript.includes("заховай ютуб") || transcript.includes("вимкни відео") || transcript.includes("вимкни радіо") || transcript.includes("зупини музику")) {
-            setYouTubeMode('hide');
-            liveRadioPlayer.pause();
-            speak("Вимикаю.");
-            return;
+        if (transcript.includes("заховай ютуб") || transcript.includes("вимкни відео") || transcript.includes("вимкни радіо")) {
+            setYouTubeMode('hide'); liveRadioPlayer.pause(); recognition.stop(); speak("Вимикаю."); return;
         }
 
         if (transcript === "дуся" || transcript.startsWith("дуся ") || transcript.startsWith("дуся,")) {
             playBeep();
             dusyaBtn.style.backgroundColor = "#FFA500"; 
-            
             const cleanQuery = transcript.replace("дуся", "").trim();
             
             if (cleanQuery.length > 0) {
                 statusElement.innerText = "Дуся: Думаю...";
                 recognition.stop(); 
                 
-                const thisRequestTime = Date.now();
-                currentAiRequestTime = thisRequestTime;
-
+                const thisRequestTime = Date.now(); currentAiRequestTime = thisRequestTime;
                 const aiResponse = await askDusyaAI(cleanQuery);
-                
                 if (currentAiRequestTime !== thisRequestTime) return; 
                 
                 dusyaBtn.style.backgroundColor = "#00FF00"; 
-                
+
+                // === ВІДНОВЛЕНА ЛОГІКА YOUTUBE ТА РАДІО ===
                 if (aiResponse.includes("[RADIO:")) {
                     const match = aiResponse.match(/\[RADIO:\s*(.*?)\s*\]/);
                     let cleanText = aiResponse.replace(/\[RADIO:.*?\]/, "").trim();
                     if (match && match[1]) {
                         let success = playLiveRadio(match[1]);
                         if (!success) {
-                            cleanText = "Не знайшла цю станцію у базі прямого радіо, шукаю на Ютубі.";
+                            cleanText = "Шукаю станцію на Ютубі. Натисніть плей на екрані.";
                             setYouTubeMode('bottom', `${match[1]} прямий ефір радіо`);
                         }
                     }
@@ -347,20 +372,25 @@ if (SpeechRecognition) {
                 else if (aiResponse.includes("[WATCH:")) {
                     const match = aiResponse.match(/\[WATCH:\s*(.*?)\s*\]/);
                     if (match && match[1]) setYouTubeMode('fullscreen', match[1]); 
-                    speak(aiResponse.replace(/\[WATCH:.*?\]/, "").trim());
+                    statusElement.innerText = "Дуся: Відео на весь екран...";
+                    speak(aiResponse.replace(/\[WATCH:.*?\]/, "").trim() + ". Не забудьте натиснути плей на екрані.");
                 } 
                 else if (aiResponse.includes("[PLAY:")) {
                     const match = aiResponse.match(/\[PLAY:\s*(.*?)\s*\]/);
                     if (match && match[1]) setYouTubeMode('bottom', match[1]); 
-                    speak(aiResponse.replace(/\[PLAY:.*?\]/, "").trim());
+                    statusElement.innerText = "Дуся: Вмикаю музику...";
+                    speak(aiResponse.replace(/\[PLAY:.*?\]/, "").trim() + ". Натисніть плей.");
                 } 
                 else {
                     statusElement.innerText = "Дуся: Говорю...";
                     speak(aiResponse);
                 }
+                // ==========================================
+
             } else {
                 statusElement.innerText = "Дуся: Слухаю...";
                 dusyaBtn.style.backgroundColor = "#00FF00"; 
+                recognition.stop(); 
                 speak("Слухаю");
             }
         }
@@ -378,42 +408,24 @@ if (SpeechRecognition) {
 // ==========================================
 dusyaBtn.addEventListener('click', async () => {
     if (!isListening) {
-        isListening = true;
-        dusyaBtn.classList.add('active');
-        dusyaBtn.innerText = "Дуся Активна";
-        statusElement.innerText = "Дуся: Слухаю...";
-        keepAliveAudio.play().catch(e => {});
-        
-        try {
-            if ('wakeLock' in navigator) {
-                wakeLock = await navigator.wakeLock.request('screen');
-                console.log("Екран заблоковано.");
-            }
-        } catch (err) { }
-
+        isListening = true; dusyaBtn.classList.add('active'); dusyaBtn.innerText = "Дуся Активна";
+        statusElement.innerText = "Дуся: Слухаю..."; keepAliveAudio.play().catch(e => {});
+        try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
         speak("Готова.");
     } else {
-        isListening = false;
-        dusyaBtn.classList.remove('active');
-        dusyaBtn.innerText = "Запустити Дусю";
-        statusElement.innerText = "Вимкнена";
-        window.speechSynthesis.cancel();
-        if (recognition) recognition.stop();
-        keepAliveAudio.pause();
-        setYouTubeMode('hide');
-        liveRadioPlayer.pause();
-        liveRadioPlayer.src = "";
-        
-        if (wakeLock !== null) {
-            wakeLock.release();
-            wakeLock = null;
-        }
+        isListening = false; dusyaBtn.classList.remove('active'); dusyaBtn.innerText = "Запустити Дусю";
+        statusElement.innerText = "Вимкнена"; window.speechSynthesis.cancel();
+        if (recognition) recognition.stop(); keepAliveAudio.pause();
+        setYouTubeMode('hide'); liveRadioPlayer.pause(); liveRadioPlayer.src = "";
+        if (wakeLock !== null) { wakeLock.release(); wakeLock = null; }
     }
 });
 
 if (navigator.geolocation) {
     navigator.geolocation.watchPosition(
         function(position) {
+            currentLat = position.coords.latitude;
+            currentLon = position.coords.longitude;
             let speedKmh = Math.round(position.coords.speed * 3.6);
             if (speedKmh >= 0) {
                 speedElement.innerText = speedKmh;
@@ -426,7 +438,6 @@ if (navigator.geolocation) {
             }
             if (speedKmh < 50) { said55 = false; said70 = false; said100 = false; }
         },
-        function(error) {},
-        { enableHighAccuracy: true }
+        function(error) {}, { enableHighAccuracy: true }
     );
 }
