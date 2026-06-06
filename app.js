@@ -19,7 +19,7 @@ window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices(
 // ==========================================
 // 1. НАЛАШТУВАННЯ ТА ЗМІННІ СТАНУ
 // ==========================================
-console.log("Запуск app.js: Версія для ТЕЛЕФОНУ (Негаснучий екран, великі цифри, анти-фантом)!");
+console.log("Запуск app.js: Версія з командою 'Завершити' та прямим радіо!");
 
 const speedElement = document.getElementById('speed-display');
 const statusElement = document.getElementById('status-text');
@@ -40,9 +40,22 @@ let said55 = false;
 let said70 = false;
 let said100 = false;
 let currentAiRequestTime = 0; 
-
-// Змінна для блокування екрану
 let wakeLock = null;
+
+// ПЛЕЄР ДЛЯ ПРЯМИХ РАДІОСТАНЦІЙ
+let liveRadioPlayer = new Audio();
+const radioStations = {
+    "рокс": "https://online.radioroks.ua/RadioROKS",
+    "хіт": "https://online.hitfm.ua/HitFM",
+    "люкс": "https://icecast.luxnet.ua/lux",
+    "байрактар": "https://online.radiobayraktar.com.ua/RadioBayraktar",
+    "ера": "https://icecast.nv.ua/NV", 
+    "нв": "https://icecast.nv.ua/NV",
+    "промінь": "https://radio.nrcu.gov.ua:8000/promin-mp3",
+    "п'ятниця": "https://radio.radiopyatnica.com.ua:8000/radiopyatnica",
+    "kiss": "https://online.kissfm.ua/KissFM",
+    "мелодія": "https://online.melodiafm.ua/MelodiaFM"
+};
 
 // ==========================================
 // 2. ІНТЕРФЕЙС ТА НАЛАШТУВАННЯ
@@ -53,9 +66,8 @@ window.addEventListener('DOMContentLoaded', () => {
         if (savedKey) apiKeyInput.value = savedKey; 
     } catch (e) { }
 
-    // ЗБІЛЬШУЄМО ЦИФРИ ШВИДКОСТІ В 3 РАЗИ
     if (speedElement) {
-        speedElement.style.fontSize = "25vh"; // Динамічний гігантський розмір (25% від висоти екрана)
+        speedElement.style.fontSize = "25vh"; 
         speedElement.style.lineHeight = "1.2";
         speedElement.style.fontWeight = "900";
     }
@@ -86,7 +98,7 @@ window.addEventListener('DOMContentLoaded', () => {
         speedOverlay.style.color = "#00FF00"; 
         speedOverlay.style.padding = "15px 25px";
         speedOverlay.style.borderRadius = "15px";
-        speedOverlay.style.fontSize = "40px"; // Більший віджет швидкості для відео
+        speedOverlay.style.fontSize = "40px"; 
         speedOverlay.style.fontWeight = "bold";
         speedOverlay.style.fontFamily = "sans-serif";
         speedOverlay.style.pointerEvents = "none"; 
@@ -111,7 +123,6 @@ saveSettingsBtn.addEventListener('click', () => {
     }
 });
 
-// Відновлення блокування екрану, якщо водій згорнув і розгорнув браузер
 document.addEventListener('visibilitychange', async () => {
     if (wakeLock !== null && document.visibilityState === 'visible') {
         try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e) {}
@@ -155,7 +166,7 @@ function speak(text) {
 }
 
 // ==========================================
-// 4. КЕРУВАННЯ РЕЖИМАМИ YOUTUBE 
+// 4. КЕРУВАННЯ МУЛЬТИМЕДІА
 // ==========================================
 function setYouTubeMode(mode, query = null) {
     const ytFrame = document.getElementById('dusya-youtube-player');
@@ -164,6 +175,7 @@ function setYouTubeMode(mode, query = null) {
     if (!ytFrame || !speedOverlay) return;
 
     if (mode === 'fullscreen') {
+        liveRadioPlayer.pause(); 
         ytFrame.style.display = "block";
         ytFrame.style.height = "100vh"; 
         ytFrame.style.top = "0";
@@ -172,6 +184,7 @@ function setYouTubeMode(mode, query = null) {
         speedOverlay.style.display = "block"; 
     } 
     else if (mode === 'bottom') {
+        liveRadioPlayer.pause();
         ytFrame.style.display = "block";
         ytFrame.style.height = "35vh"; 
         ytFrame.style.top = "auto";
@@ -190,6 +203,24 @@ function setYouTubeMode(mode, query = null) {
     }
 }
 
+function playLiveRadio(stationName) {
+    let streamUrl = "";
+    const lowerName = stationName.toLowerCase();
+    for (let key in radioStations) {
+        if (lowerName.includes(key)) {
+            streamUrl = radioStations[key];
+            break;
+        }
+    }
+    if (streamUrl) {
+        setYouTubeMode('hide'); 
+        liveRadioPlayer.src = streamUrl;
+        liveRadioPlayer.play().catch(e => console.log("Браузер заблокував автоплей"));
+        return true;
+    }
+    return false; 
+}
+
 // ==========================================
 // 5. ЗВ'ЯЗОК З ШІ
 // ==========================================
@@ -199,11 +230,10 @@ async function askDusyaAI(userQuestion) {
 
     const savedMemory = localStorage.getItem('dusya_facts') || "Немає додаткових фактів.";
     const currentTime = new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
-    const currentDate = new Date().toLocaleDateString('uk-UA');
     
     const systemInstruction = `Ти - автомобільний голосовий помічник Дуся. Час: ${currentTime}. Пам'ятай: ${savedMemory}. Відповідай дуже коротко. 
     1. РАДІО - тег [RADIO: назва радіо].
-    2. МУЗИКА - тег [PLAY: запит].
+    2. МУЗИКА фоном - тег [PLAY: запит].
     3. ВІДЕО на весь екран - тег [WATCH: запит].`;
 
     try {
@@ -222,7 +252,7 @@ async function askDusyaAI(userQuestion) {
 }
 
 // ==========================================
-// 6. РОЗПІЗНАВАННЯ МОВИ ТА ЗВУК "ПІК"
+// 6. РОЗПІЗНАВАННЯ МОВИ ТА ЗВУК
 // ==========================================
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition;
@@ -249,14 +279,23 @@ if (SpeechRecognition) {
     recognition.interimResults = false;
 
     recognition.onresult = async (event) => {
-        // ЗАХИСТ 1: Якщо Дуся зараз говорить, ігноруємо все, щоб вона не почула саму себе!
         if (window.speechSynthesis.speaking) return;
 
         const last = event.results.length - 1;
         const transcript = event.results[last][0].transcript.toLowerCase().trim();
         console.log("Почуто: ", transcript);
 
-        // ЕКСТРЕНЕ СКИДАННЯ
+        // --- КОМАНДА ДЛЯ ПОВНОГО СКИНЕННЯ ВСЬОГО МУЛЬТИМЕДІА ---
+        if (transcript === "завершити" || transcript.includes("завершити") || transcript.includes("вимкни все")) {
+            setYouTubeMode('hide');
+            liveRadioPlayer.pause();
+            liveRadioPlayer.src = "";
+            window.speechSynthesis.cancel();
+            playBeep();
+            statusElement.innerText = "Дуся: Слухаю...";
+            return;
+        }
+
         if (transcript === "дуся слухай" || transcript.includes("дуся слухай")) {
             window.speechSynthesis.cancel(); 
             currentAiRequestTime = Date.now(); 
@@ -266,13 +305,13 @@ if (SpeechRecognition) {
             return;
         }
 
-        if (transcript.includes("заховай ютуб") || transcript.includes("вимкни відео")) {
+        if (transcript.includes("заховай ютуб") || transcript.includes("вимкни відео") || transcript.includes("вимкни радіо") || transcript.includes("зупини музику")) {
             setYouTubeMode('hide');
+            liveRadioPlayer.pause();
             speak("Вимикаю.");
             return;
         }
 
-        // ЗАХИСТ 2: Більш жорстка перевірка на ім'я, щоб не було фантомних "плімів" від шуму дороги
         if (transcript === "дуся" || transcript.startsWith("дуся ") || transcript.startsWith("дуся,")) {
             playBeep();
             dusyaBtn.style.backgroundColor = "#FFA500"; 
@@ -288,14 +327,22 @@ if (SpeechRecognition) {
 
                 const aiResponse = await askDusyaAI(cleanQuery);
                 
-                if (currentAiRequestTime !== thisRequestTime) return; // Відкидаємо старе
+                if (currentAiRequestTime !== thisRequestTime) return; 
                 
                 dusyaBtn.style.backgroundColor = "#00FF00"; 
                 
                 if (aiResponse.includes("[RADIO:")) {
                     const match = aiResponse.match(/\[RADIO:\s*(.*?)\s*\]/);
-                    if (match && match[1]) setYouTubeMode('bottom', `${match[1]} прямий ефір радіо`); 
-                    speak(aiResponse.replace(/\[RADIO:.*?\]/, "").trim());
+                    let cleanText = aiResponse.replace(/\[RADIO:.*?\]/, "").trim();
+                    if (match && match[1]) {
+                        let success = playLiveRadio(match[1]);
+                        if (!success) {
+                            cleanText = "Не знайшла цю станцію у базі прямого радіо, шукаю на Ютубі.";
+                            setYouTubeMode('bottom', `${match[1]} прямий ефір радіо`);
+                        }
+                    }
+                    statusElement.innerText = "Дуся: Вмикаю радіо...";
+                    speak(cleanText);
                 }
                 else if (aiResponse.includes("[WATCH:")) {
                     const match = aiResponse.match(/\[WATCH:\s*(.*?)\s*\]/);
@@ -327,7 +374,7 @@ if (SpeechRecognition) {
 }
 
 // ==========================================
-// 7. КНОПКА ТА GPS ТА ЕКРАН
+// 7. КНОПКА ТА GPS 
 // ==========================================
 dusyaBtn.addEventListener('click', async () => {
     if (!isListening) {
@@ -337,13 +384,12 @@ dusyaBtn.addEventListener('click', async () => {
         statusElement.innerText = "Дуся: Слухаю...";
         keepAliveAudio.play().catch(e => {});
         
-        // ВМИКАЄМО БЛОКУВАННЯ ЕКРАНУ, ЩОБ ВІН НЕ ГАС
         try {
             if ('wakeLock' in navigator) {
                 wakeLock = await navigator.wakeLock.request('screen');
-                console.log("Екран заблоковано від вимкнення.");
+                console.log("Екран заблоковано.");
             }
-        } catch (err) { console.log("Помилка блокування екрану:", err); }
+        } catch (err) { }
 
         speak("Готова.");
     } else {
@@ -355,8 +401,9 @@ dusyaBtn.addEventListener('click', async () => {
         if (recognition) recognition.stop();
         keepAliveAudio.pause();
         setYouTubeMode('hide');
+        liveRadioPlayer.pause();
+        liveRadioPlayer.src = "";
         
-        // ЗВІЛЬНЯЄМО ЕКРАН
         if (wakeLock !== null) {
             wakeLock.release();
             wakeLock = null;
