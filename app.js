@@ -19,7 +19,7 @@ window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices(
 // ==========================================
 // 1. НАЛАШТУВАННЯ ТА ЗМІННІ СТАНУ 
 // ==========================================
-console.log("Запуск Дусі v5.1: Повний фінальний фарш зі швидким інтернет-тестом!");
+console.log("Запуск Дусі v5.2: Стабільна версія, замітки з живим таймером та вільний вибір міст!");
 
 const speedElement = document.getElementById('speed-display');
 const statusElement = document.getElementById('status-text');
@@ -42,7 +42,7 @@ let said100 = false;
 let currentAiRequestTime = 0; 
 let wakeLock = null;
 
-// ТАЙМЕРИ ОЧІКУВАННЯ ТА РОЗУМНІ РЕЖИМІВ
+// ТАЙМЕРИ ОЧІКУВАННЯ ТА РОЗУМНИХ РЕЖИМІВ
 let isWaitingForCommand = false;
 let waitingTimer = null;
 let isAutoGuideActive = false; 
@@ -53,6 +53,7 @@ let antiSleepCounter = 0;
 // ЗМІННІ ДЛЯ СЕЙФІВ ТА СПЕЦРЕЖИМІВ
 let isRecordingNote = false;   
 let currentNoteText = "";      
+let noteTimerInterval = null;  // Інтервал для живого секундоміра
 let isTimeMachineActive = false;
 let said88mph = false;
 let jamStartTime = 0;          
@@ -167,11 +168,11 @@ function speak(text) {
 
         utterance.onend = () => {
             playChime(); 
-            if (isListening && !window.speechSynthesis.speaking) {
+            if (isListening && !window.speechSynthesis.speaking && !isRecordingNote) {
                 try { recognition.start(); statusElement.innerText = "Дуся: Слухаю..."; } catch(e) { }
             }
         };
-        utterance.onerror = () => { if (isListening) { try { recognition.start(); } catch(e) { } } };
+        utterance.onerror = () => { if (isListening && !isRecordingNote) { try { recognition.start(); } catch(e) { } } };
         window.speechSynthesis.speak(utterance);
     }
 }
@@ -325,15 +326,10 @@ if (SpeechRecognition) {
         const transcript = event.results[last][0].transcript.toLowerCase().trim();
         console.log("Дуся почула: ", transcript);
 
-        // --- 1. ПЕРЕХОПЛЕННЯ ЗАМІТОК У СЕЙФ ---
-        if (isRecordingNote && !transcript.includes("стоп") && !transcript.includes("хватить")) {
-            currentNoteText += " " + transcript;
-            return; 
-        }
-
-        // --- 2. АВАРІЙНИЙ СТОП-КРАН ---
+        // --- 1. АВАРІЙНИЙ СТОП-КРАН ТА ОЧИЩЕННЯ ТАЙМЕРІВ ---
         if (transcript.includes("стоп") || transcript.includes("завершити") || transcript.includes("хватить") || transcript.includes("закрийся") || transcript.includes("не пизди") || transcript.includes("все нормально")) {
             if (antiSleepTimer) { clearInterval(antiSleepTimer); antiSleepTimer = null; }
+            if (noteTimerInterval) { clearInterval(noteTimerInterval); noteTimerInterval = null; }
             window.speechSynthesis.cancel(); 
             liveRadioPlayer.pause(); 
             currentMode = "DEFAULT"; chatHistory = []; 
@@ -345,8 +341,38 @@ if (SpeechRecognition) {
             return;
         }
 
+        // --- 2. ПЕРЕХОПЛЕННЯ НЕОБМЕЖЕНИХ ЗАМІТОК СЕЙФА ---
+        if (isRecordingNote) {
+            if (transcript.includes("зберегти замітку") || transcript.includes("зберегти")) {
+                isRecordingNote = false;
+                if (noteTimerInterval) { clearInterval(noteTimerInterval); noteTimerInterval = null; }
+                let existingNotes = localStorage.getItem('dusya_notes') || "";
+                if (currentNoteText.trim() !== "") {
+                    localStorage.setItem('dusya_notes', existingNotes + (existingNotes ? " | " : "") + currentNoteText.trim());
+                    speak("Замітку надійно збережено у сейф.");
+                } else { speak("Запис порожній."); }
+                statusElement.innerText = "Дуся: Слухаю...";
+                if (recognition) { try { recognition.stop(); } catch(e){} }
+            } else {
+                currentNoteText += " " + transcript;
+            }
+            return; 
+        }
+
         if (transcript.includes("дуся") || isWaitingForCommand) { playPing(); }
         if (window.speechSynthesis.speaking) return; 
+
+        // --- ЛОКАЛЬНІ МИТТЄВІ КОМАНДИ ЧАСУ ТА ДАТИ (БЕЗ ІНТЕРНЕТУ) ---
+        if (transcript.includes("котра година") || transcript.includes("який зараз час") || transcript.includes("який час")) {
+            if (recognition) recognition.stop();
+            let localT = new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+            speak(`Зараз ${localT}.`); return;
+        }
+        if (transcript.includes("яке сьогодні число") || transcript.includes("який сьогодні день") || transcript.includes("яка дата")) {
+            if (recognition) recognition.stop();
+            let localD = new Date().toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' });
+            speak(`Сьогодні ${localD}.`); return;
+        }
 
         // --- ЖИВА ПЕРЕВІРКА ЯКОСТІ ІНТЕРНЕТУ (ПІНГ-ТЕСТ) ---
         if (transcript.includes("як зв'язок") || transcript.includes("який інтернет") || transcript.includes("перевір інтернет")) {
@@ -359,34 +385,37 @@ if (SpeechRecognition) {
                 try {
                     await fetch("https://api.open-meteo.com/v1/forecast?latitude=50&longitude=30&current=temperature_2m", { mode: 'no-cors' });
                     const duration = Date.now() - startTime;
-                    if (duration < 600) {
-                        speak("Зв'язок відмінний, інтернет літає.");
-                    } else {
-                        speak("Зв'язок слабкий, можливі затримки у відповідях.");
-                    }
-                } catch (e) {
-                    speak("Зв'язок нестабільний або сервер не відповідає.");
-                }
+                    if (duration < 600) speak("Зв'язок відмінний, інтернет літає.");
+                    else speak("Зв'язок слабкий, можливі затримки у відповідях.");
+                } catch (e) { speak("Зв'язок нестабільний."); }
             }
             return;
         }
 
-        // --- 3. СЕЙФ ЗАМІТОК ---
+        // --- ПРЯМА КАНАЛІЗАЦІЯ НА YOUTUBE БЕЗ ШІ ---
+        if (transcript.includes("знайди в ютубі") || transcript.includes("включи в ютубі") || transcript.includes("пошук в ютубі")) {
+            let ytQuery = transcript.replace(/(?:знайди в ютубі|включи в ютубі|пошук в ютубі)/gi, "").trim();
+            if (recognition) recognition.stop();
+            speak(`Шукаю ${ytQuery} на Ютубі.`);
+            openYouTubeApp(ytQuery); return;
+        }
+
+        // --- СЕЙФ ЗАМІТОК З ЖИВИМ СЕКУНДОМІРОМ ---
         if (transcript.includes("запиши замітку") || transcript.includes("додай замітку")) {
             isRecordingNote = true; currentNoteText = "";
-            statusElement.innerText = "Дуся: 🔴 Запис замітки (30 сек)...";
+            let noteStartTime = Date.now();
+            if (noteTimerInterval) clearInterval(noteTimerInterval);
+            
+            // Запуск живого секундоміра на екрані
+            noteTimerInterval = setInterval(() => {
+                let elapsedSecs = Math.floor((Date.now() - noteStartTime) / 1000);
+                let mins = String(Math.floor(elapsedSecs / 60)).padStart(2, '0');
+                let secs = String(elapsedSecs % 60).padStart(2, '0');
+                statusElement.innerText = `Дуся: 🔴 Запис [${mins}:${secs}]... Скажіть 'Зберегти'`;
+            }, 1000);
+
             if (recognition) recognition.stop();
-            speak("Пішов запис.");
-            setTimeout(() => {
-                if (!isRecordingNote) return; 
-                isRecordingNote = false;
-                let existingNotes = localStorage.getItem('dusya_notes') || "";
-                if (currentNoteText.trim() !== "") {
-                    localStorage.setItem('dusya_notes', existingNotes + (existingNotes ? " | " : "") + currentNoteText.trim());
-                    speak("Замітку збережено у сейф.");
-                } else { speak("Запис порожній."); }
-                statusElement.innerText = "Дуся: Слухаю...";
-            }, 30000);
+            speak("Слухаю. Коли закінчиш, скажи слово Зберегти.");
             return;
         }
         if (transcript.includes("прочитай замітки") || transcript.includes("що я наговорив") || transcript.includes("мої замітки")) {
@@ -395,17 +424,27 @@ if (SpeechRecognition) {
             if (notes) speak("У сейфі є такі записи: " + notes); else speak("Сейф порожній, заміток немає.");
             return;
         }
-        if (transcript.includes("видали всі замітки") || transcript.includes("зітри все") || transcript.includes("очистити сейф")) {
+        if (transcript.includes("видали всі замітки") || transcript.includes("зітри всі замітки") || transcript.includes("очистити сейф заміток")) {
             localStorage.removeItem('dusya_notes');
-            if (recognition) recognition.stop(); speak("Сейф порожній, все видалено."); return;
+            if (recognition) recognition.stop(); speak("Сейф порожній, всі замітки видалено."); return;
         }
 
-        // --- 4. ПАРКУВАЛЬНА ПАМ'ЯТЬ ---
+        // --- ДИНАМІЧНИЙ ПРОРАХУНОК ВІДСТАНІ ДО БУДЬ-ЯКОГО МІСТА ---
+        let distanceMatch = transcript.match(/(?:відстань до|скільки до|далеко до)\s+([а-яєіїґ-]+)/i);
+        if (distanceMatch) {
+            let targetCity = distanceMatch[1];
+            if (recognition) recognition.stop();
+            statusElement.innerText = `Дуся: Рахую до міста ${targetCity}...`;
+            let distanceRes = await askDusyaAI(`Ми зараз в локації ${currentPlaceName} (координати: ${currentLat}, ${currentLon}). Обчесли приблизну відстань до міста ${targetCity} по трасах. Дай дуже коротку відповідь в один рядок.`);
+            speak(distanceRes); return;
+        }
+
+        // --- ПАРКУВАЛЬНА ПАМ'ЯТЬ ---
         if (transcript.includes("запам'ятай парковку") || transcript.includes("запам'ятай машину")) {
             if (currentLat && currentLon) {
                 localStorage.setItem('dusya_parking', JSON.stringify({lat: currentLat, lon: currentLon}));
                 if (recognition) recognition.stop(); speak("Координати парковки надійно збережено у сейф.");
-            } else { if (recognition) recognition.stop(); speak("Немає сигналу GPS для збереження."); }
+            } else { if (recognition) recognition.stop(); speak("Немає сигналу GPS."); }
             return;
         }
         if (transcript.includes("де моя машина") || transcript.includes("де я припаркувався") || transcript.includes("знайди машину")) {
@@ -413,13 +452,13 @@ if (SpeechRecognition) {
             if (recognition) recognition.stop();
             if (parkingData) {
                 let p = JSON.parse(parkingData);
-                window.open(`https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}`, '_blank');
-                speak("Відкриваю пішохідний маршрут до вашого авто на картах Гугл.");
-            } else { speak("Я не пам'ятаю, де ви припаркувалися. Сейф порожній."); }
+                window.open(`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}&travelmode=walking`, '_blank');
+                speak("Відкриваю пішохідний маршрут до вашого авто на картах.");
+            } else { speak("Я не пам'ятаю, де ви припаркувалися."); }
             return;
         }
 
-        // --- 5. ВІЗУАЛЬНІ РЕЖИМИ ТА МАШИНА ЧАСУ ---
+        // --- ВІЗУАЛЬНІ РЕЖИМИ ТА МАШИНА ЧАСУ ---
         if (transcript.includes("нічний режим")) {
             document.body.style.backgroundColor = "#000000"; speedElement.style.color = "#8B0000"; speedElement.style.textShadow = "none";
             if (recognition) recognition.stop(); speak("Нічний екран увімкнено."); return;
@@ -439,11 +478,6 @@ if (SpeechRecognition) {
         if (transcript.includes("яка швидкість") || transcript.includes("швидкість зараз")) {
             if (recognition) recognition.stop(); speak(`Зараз наша швидкість ${gpsSpeed} кілометрів на годину.`); return;
         }
-        if (transcript.includes("відстань до львова") || transcript.includes("скільки до львова")) {
-            if (recognition) recognition.stop(); statusElement.innerText = "Дуся: Рахую кілометри...";
-            let distanceRes = await askDusyaAI(`Ми зараз в ${currentPlaceName}. Обчесли приблизну відстань до Львова по трасі. Один рядок.`);
-            speak(distanceRes); return;
-        }
 
         if (transcript.includes("увімкни авто-гіда") || transcript.includes("увімкни автогіда")) {
             isAutoGuideActive = true; lastPlaceName = currentPlaceName;
@@ -456,10 +490,9 @@ if (SpeechRecognition) {
         if (transcript.includes("режим балабола") || transcript.includes("режим балабол") || transcript.includes("будь балаболом")) {
             currentMode = "CHATTERBOX";
             if (recognition) recognition.stop();
-            speak("О, це мій улюблений режим! Вмикаю Балабола. Ну що, розкажи, як взагалі настрій сьогодні в дорозі?");
+            speak("О, це мій улюблений режим! Вмикаю Балабола. Ну що, розкажи, як настрій сьогодні в дорозі?");
             isWaitingForCommand = true; clearTimeout(waitingTimer);
-            waitingTimer = setTimeout(() => { isWaitingForCommand = false; }, 10000);
-            return;
+            waitingTimer = setTimeout(() => { isWaitingForCommand = false; }, 10000); return;
         }
 
         if (transcript.includes("я хочу спати") || transcript.includes("я сонний") || transcript.includes("засинаю")) {
@@ -484,8 +517,7 @@ if (SpeechRecognition) {
                         waitingTimer = setTimeout(() => { isWaitingForCommand = false; }, 10000);
                     }
                 }, 4000);
-            }, 120000);
-            return;
+            }, 120000); return;
         }
 
         if (transcript.includes("погода")) {
@@ -568,10 +600,11 @@ dusyaBtn.addEventListener('click', async () => {
         isListening = false; dusyaBtn.classList.remove('active'); dusyaBtn.innerText = "Запустити Дусю";
         statusElement.innerText = "Вимкнена"; window.speechSynthesis.cancel();
         if (antiSleepTimer) { clearInterval(antiSleepTimer); antiSleepTimer = null; }
+        if (noteTimerInterval) { clearInterval(noteTimerInterval); noteTimerInterval = null; }
         if (recognition) recognition.stop(); keepAliveAudio.pause();
         liveRadioPlayer.pause(); liveRadioPlayer.src = "";
         currentMode = "DEFAULT"; chatHistory = []; isWaitingForCommand = false; isAutoGuideActive = false;
-        isTimeMachineActive = false; resetVisuals();
+        isTimeMachineActive = false; isRecordingNote = false; resetVisuals();
         if (locationTimer) { clearInterval(locationTimer); locationTimer = null; }
         if (wakeLock !== null) { wakeLock.release(); wakeLock = null; }
     }
@@ -584,15 +617,10 @@ if (navigator.geolocation) {
             let speedKmh = Math.round(position.coords.speed * 3.6);
             
             if (speedKmh >= 0) { 
-                // МАШИНА ЧАСУ: Ефект інопланетного двигуна
-                if (isTimeMachineActive && speedKmh > gpsSpeed + 3) {
-                    playSciFiAcceleration(); 
-                }
+                if (isTimeMachineActive && speedKmh > gpsSpeed + 3) { playSciFiAcceleration(); }
                 if (isTimeMachineActive && speedKmh >= 141 && !said88mph) {
-                    said88mph = true; playPing();
-                    speak("88 миль на годину! Стрибок у часі!");
+                    said88mph = true; playPing(); speak("88 миль на годину! Стрибок у часі!");
                 }
-
                 speedElement.innerText = speedKmh; 
                 gpsSpeed = speedKmh; 
             }
@@ -604,9 +632,7 @@ if (navigator.geolocation) {
                     isJamZenActive = true; currentMode = "CHATTERBOX";
                     speak("Схоже, ми застрягли у заторі. Щоб не нудьгувати, я вмикаю режим балабола. Розкажи, як настрій?");
                 }
-            } else {
-                jamStartTime = 0; isJamZenActive = false;
-            }
+            } else { jamStartTime = 0; isJamZenActive = false; }
 
             if (speedKmh >= 100 && !said100) { speak("Попереду можуть быть камери, скинь швидкість!"); said100 = true; } 
             else if (speedKmh >= 70 && speedKmh < 100 && !said70) { speak("Тримай швидкість під контролем."); said70 = true; } 
