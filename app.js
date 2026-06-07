@@ -19,7 +19,7 @@ window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices(
 // ==========================================
 // 1. НАЛАШТУВАННЯ ТА ЗМІННІ СТАНУ 
 // ==========================================
-console.log("Запуск Дусі v3.2: Ерудит-режим активовано!");
+console.log("Запуск Дусі v4.0: Повний інтелектуальний фарш для траси активовано!");
 
 const speedElement = document.getElementById('speed-display');
 const statusElement = document.getElementById('status-text');
@@ -42,9 +42,13 @@ let said100 = false;
 let currentAiRequestTime = 0; 
 let wakeLock = null;
 
-// ТАЙМЕРИ ОЧІКУВАННЯ КОМАНДИ
+// ТАЙМЕРИ ОЧІКУВАННЯ КОМАНДИ ТА РОЗУМНИХ РЕЖИМІВ
 let isWaitingForCommand = false;
 let waitingTimer = null;
+let isAutoGuideActive = false; // Стан автоматичного екскурсовода
+let lastPlaceName = "";        // Для відстеження зміни населених пунктів
+let antiSleepTimer = null;     // Таймер для режиму Анти-сон
+let antiSleepCounter = 0;      // Лічильник хвилин для нагадування про каву
 
 let currentLat = null;
 let currentLon = null;
@@ -52,6 +56,7 @@ let currentPlaceName = "невідома місцевість";
 let isInCityZone = false; 
 let isFirstLocationCheck = true;
 let locationTimer = null;
+let gpsSpeed = 0;              // Глобальне відстеження швидкості для фільтрів
 
 let liveRadioPlayer = new Audio();
 const radioStations = {
@@ -103,8 +108,32 @@ document.addEventListener('visibilitychange', async () => {
 });
 
 // ==========================================
-// 3. СИНТЕЗ МОВЛЕННЯ 
+// 3. ЗВУКОВІ МАЯКИ ТА СИНТЕЗ МОВЛЕННЯ 
 // ==========================================
+function playPing() { // Сигнал "Дінь" (Почула водія / Відправка)
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator(); const gain = ctx.createGain();
+        osc.type = 'sine'; osc.frequency.setValueAtTime(1200, ctx.currentTime);
+        gain.gain.setValueAtTime(0.08, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(); osc.stop(ctx.currentTime + 0.15);
+    } catch(e){}
+}
+
+function playChime() { // Сигнал "Блум-блум" (Закінчила відповідь / Відкрила мікрофон)
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const gain = ctx.createGain(); gain.gain.setValueAtTime(0.06, ctx.currentTime);
+        gain.connect(ctx.destination);
+        const osc1 = ctx.createOscillator(); osc1.frequency.setValueAtTime(520, ctx.currentTime);
+        osc1.connect(gain); osc1.start(); osc1.stop(ctx.currentTime + 0.08);
+        const osc2 = ctx.createOscillator(); osc2.frequency.setValueAtTime(420, ctx.currentTime + 0.08);
+        osc2.connect(gain); osc2.start(ctx.currentTime + 0.08); osc2.stop(ctx.currentTime + 0.22);
+    } catch(e){}
+}
+
 function speak(text) {
     if ('speechSynthesis' in window) {
         if (recognition) { try { recognition.stop(); } catch(e){} }
@@ -121,6 +150,7 @@ function speak(text) {
         if (bestVoice) utterance.voice = bestVoice;
 
         utterance.onend = () => {
+            playChime(); // Граємо сигнал завершення мовлення
             if (isListening && !window.speechSynthesis.speaking) {
                 try { recognition.start(); statusElement.innerText = "Дуся: Слухаю..."; } catch(e) { }
             }
@@ -147,7 +177,7 @@ function playLiveRadio(stationName) {
 }
 
 // ==========================================
-// 5. GPS КАРТИ ТА ЗОНИ
+// 5. GPS КАРТИ ТА ЗОНИ (З ФІЛЬТРОМ ОБ'ЇЗНИХ ДОКІЛ)
 // ==========================================
 async function checkLocationAndZone() {
     if (!currentLat || !currentLon) return;
@@ -164,6 +194,21 @@ async function checkLocationAndZone() {
                 isFirstLocationCheck = false; isInCityZone = isCurrentlyInCity;
                 if (isInCityZone) { speak(`Привіт! Ми зараз у місті ${currentPlaceName}. Дозволена швидкість 50 кілометрів на годину. Пристебни пасок і будь уважним.`); } 
                 else { speak(`Вітаю! Ми на трасі, навколо ${currentPlaceName}. Обмеження швидкості 90. Не забудь пристебнутися, поїхали!`); }
+                return;
+            }
+
+            // Автоматичний Аудіо-гід (Екскурсовод) при зміні локацій
+            if (isAutoGuideActive && place && place !== lastPlaceName) {
+                lastPlaceName = place;
+                statusElement.innerText = "Дуся: Авто-гід розповідає...";
+                let guideResponse = await askDusyaAI(`Ми зараз проїжджаємо або в'їжджаємо в населений пункт ${place}. Розкажи один короткий, але дуже цікавий історичний факт, легенду або про головну пам'ятку цього місця. Обмеження: максимум 2-3 речення. Якщо реальних історичних фактів немає - не вигадуй дурниць.`);
+                speak(guideResponse);
+                return;
+            }
+
+            // ФІЛЬТР ТРАСИ ТА ОБ'ЇЗНИХ ДОРОГ (Якщо летимо > 80 км/год, не вимагаємо скидати до 50)
+            if (gpsSpeed > 80) {
+                isInCityZone = false; 
                 return;
             }
 
@@ -204,40 +249,61 @@ async function handleWeatherCommand(city) {
 }
 
 // ==========================================
-// 6. МІЗКИ ШІ (ЕРУДИТ-РЕЖИМ)
+// 6. МІЗКИ ШІ (ДИНАМІЧНИЙ КАЛЕНДАР ТА ТАЙМАУТИ)
 // ==========================================
 async function askDusyaAI(userQuestion) {
+    if (!navigator.onLine) return "Немає зв'язку з інтернетом.";
+
     let apiKey = localStorage.getItem('gemini_api_key');
     if (!apiKey) return "Будь ласка, введіть API ключ у налаштуваннях.";
-    const currentTime = new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+    
+    // ВШИВАЄМО ЖИВИЙ КАЛЕНДАР ТА ГОДИННИК ТЕЛЕФОНУ В ШІ
+    const now = new Date();
+    const currentDateStr = now.toLocaleDateString('uk-UA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const currentTimeStr = now.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
     
     let systemInstruction = "";
     if (currentMode === "DEFAULT") {
-        systemInstruction = `Ти - Дуся, автомобільний помічник. Місце: ${currentPlaceName}. Відповідай коротко. Якщо просять радіо/музику - [RADIO: назва] або [WATCH: запит].`;
+        systemInstruction = `Ти - Дуся, автомобільний помічник. Сьогодні: ${currentDateStr}, час: ${currentTimeStr}. Місце: ${currentPlaceName}. Відповідай коротко, одним реченням. Якщо просять радіо/музику - [RADIO: назва] або [WATCH: запит].`;
     } else if (currentMode === "TALKATIVE") {
-        systemInstruction = `Ти - ерудована Дуся. Твоя спеціалізація: ремонт авто, математика, психологія, філософія, кулінарія. 
+        systemInstruction = `Ти - супер-ерудована Дуся, розумний дорожній пасажир. Сьогодні: ${currentDateStr}, час: ${currentTimeStr}. 
+        Твої знання безмежні: детальний технічний ремонт авто (причини стуків, поломок), математика, психологія, філософія, кулінарія. 
         На питання з медицини чи ветеринарії відповідай експертно, але ОБОВ'ЯЗКОВО додай дисклеймер: "Я ШІ, тому обов'язково проконсультуйся з лікарем".
-        Вести дискусії, давай розгорнуті поради. Якщо просять музику - використовуй теги [WATCH: запит] або [RADIO: назва].`;
+        Веди дискусії, висловлюй глибоку думку. СУВОРЕ ПРАВИЛО: Якщо ти не знаєш реальних історичних чи географічних фактів про місцевість — не вигадуй легенд! Так і скажи: 'Це тихе місце, але великих історичних подій тут не зафіксовано'.`;
+    } else if (currentMode === "ANTI_SLEEP") {
+        systemInstruction = `Ти - Дуся в агресивному режимі Енергетика-Будильника! Твоя мета - врятувати засинаючого водія від аварії на трасі. 
+        Говори бадьоро, емоційно, став несподівані, каверзні або провокаційні питання (про стан дороги, куди їдемо, яка погода навколо, чи знає він абсурдні факти). 
+        Пропонуй увімкнути жорсткий важкий рок чи треш-метал через YouTube. Залучай водія до постійної бесіди, змушуй його мозок працювати!`;
     } else if (currentMode === "ENGLISH") {
         systemInstruction = `Ти - вчителька англійської. Назви ОДНЕ слово українською, чекай переклад. Хвали або виправляй.`;
     } else if (currentMode === "GAMES_CITIES") {
-        systemInstruction = `Ми граємо у 'Міста'. Назви місто на потрібну літеру. Тільки назва та коротка репліка.`;
+        systemInstruction = `Ми граємо у 'Міста'. Назви місто на потрібну літеру. Тільки назва та коротка репліку.`;
     }
 
     if (chatHistory.length > 0 && chatHistory[chatHistory.length - 1].role === "user") { chatHistory.pop(); }
     chatHistory.push({ role: "user", parts: [{ text: userQuestion }] });
     if (chatHistory.length > 10) chatHistory = chatHistory.slice(-10);
 
+    // Контроль слабкого інтернету через AbortController (7 секунд таймаут)
+    const abortCtrl = new AbortController();
+    const timeoutId = setTimeout(() => abortCtrl.abort(), 7000);
+
     try {
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ systemInstruction: { parts: [{ text: systemInstruction }] }, contents: chatHistory })
+            body: JSON.stringify({ systemInstruction: { parts: [{ text: systemInstruction }] }, contents: chatHistory }),
+            signal: abortCtrl.signal
         });
+        clearTimeout(timeoutId);
         const data = await response.json();
         let aiText = data.candidates[0].content.parts[0].text;
         chatHistory.push({ role: "model", parts: [{ text: aiText }] });
         return aiText;
-    } catch (error) { return "Проблеми зі зв'язком."; }
+    } catch (error) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') return "Інтернет занадто слабкий, не можу завантажити відповідь.";
+        return "Тимчасові проблеми зі зв'язком з інтернетом.";
+    }
 }
 
 // ==========================================
@@ -267,18 +333,24 @@ if (SpeechRecognition) {
         const transcript = event.results[last][0].transcript.toLowerCase().trim();
         console.log("Дуся почула: ", transcript);
 
-        // --- АВАРІЙНИЙ СТОП (Пріоритет #1) ---
-        if (transcript.includes("стоп") || transcript.includes("завершити") || transcript.includes("хватить") || transcript.includes("закрийся") || transcript.includes("не пизди")) {
-            window.speechSynthesis.cancel(); // Одразу мовчимо
+        // --- АВАРІЙНИЙ СТОП-КРАН (Пріоритет #1) ---
+        if (transcript.includes("стоп") || transcript.includes("завершити") || transcript.includes("хватить") || transcript.includes("закрийся") || transcript.includes("не пизди") || transcript.includes("все нормально")) {
+            if (antiSleepTimer) { clearInterval(antiSleepTimer); antiSleepTimer = null; }
+            window.speechSynthesis.cancel(); 
             liveRadioPlayer.pause(); 
             currentMode = "DEFAULT"; 
             chatHistory = []; 
             isWaitingForCommand = false;
             playBeep();
-            statusElement.innerText = "Дуся: В тиші...";
+            statusElement.innerText = "Дуся: Режим Штурмана";
             if (recognition) { try { recognition.stop(); } catch(e){} }
-            speak("Мовчу.");
+            speak("Зрозуміла. Мовчу, режим штурмана повернуто.");
             return;
+        }
+
+        // ЖИВИЙ ПІНГ (Почула водія - подає сигнал)
+        if (transcript.includes("дуся") || isWaitingForCommand) {
+            playPing();
         }
 
         if (window.speechSynthesis.speaking) return; 
@@ -289,7 +361,69 @@ if (SpeechRecognition) {
             try { recognition.start(); } catch(e) {} return;
         }
 
-        // 2. МИТТЄВІ КОМАНДИ 
+        // МИТТЄВІ КОМАНДИ ШВИДКОСТІ ТА ВІДСТАНІ ДО ЛЬВОВА
+        if (transcript.includes("яка швидкість") || transcript.includes("яка зараз швидкість") || transcript.includes("швидкість зараз")) {
+            if (recognition) recognition.stop();
+            speak(`Зараз наша швидкість ${gpsSpeed} кілометрів на годину.`);
+            return;
+        }
+
+        if (transcript.includes("відстань до львова") || transcript.includes("скільки до львова") || transcript.includes("далеко до львова")) {
+            if (recognition) recognition.stop();
+            statusElement.innerText = "Дуся: Рахую кілометри...";
+            let distanceRes = await askDusyaAI(`Ми зараз знаходимося в локації ${currentPlaceName} (координати: ${currentLat}, ${currentLon}). Обчесли приблизну відстань до міста Львів по трасі. Дай дуже коротку відповідь в один рядок.`);
+            speak(distanceRes);
+            return;
+        }
+
+        // УВІМКНЕННЯ / ВИМКНЕННЯ АВТО-ГІДА
+        if (transcript.includes("увімкни авто-гіда") || transcript.includes("увімкни автогіда")) {
+            isAutoGuideActive = true; lastPlaceName = currentPlaceName;
+            if (recognition) recognition.stop();
+            speak("Автоматичний аудіо-гід увімкнено. Я буду сама розповідати про цікаві місця вздовж дороги.");
+            return;
+        }
+        if (transcript.includes("вимкни авто-гіда") || transcript.includes("вимкни автогіда")) {
+            isAutoGuideActive = false;
+            if (recognition) recognition.stop();
+            speak("Автоматичний аудіо-гід вимкнено.");
+            return;
+        }
+
+        // АКТИВАЦІЯ РЕЖИМУ АНТИ-СОН (Штурман-Енергетик)
+        if (transcript.includes("я хочу спати") || transcript.includes("я сонний") || transcript.includes("хочу спати") || transcript.includes("засинаю")) {
+            currentMode = "ANTI_SLEEP"; antiSleepCounter = 0;
+            if (antiSleepTimer) clearInterval(antiSleepTimer);
+            if (recognition) recognition.stop();
+            speak("Увага! Водій засинає! Вмикаю режим анти-сон. Я буду діставати тебе запитаннями кожні дві хвилини і не дам закрити очі!");
+            
+            antiSleepTimer = setInterval(async () => {
+                if (!isListening || currentMode !== "ANTI_SLEEP") { clearInterval(antiSleepTimer); return; }
+                antiSleepCounter += 2;
+                
+                let sleepPrompt = "Згенеруй одну бадьору, інтерактивну, каверзну репліку для засинаючого водія, запитай його про щось або запропонуй рок. ";
+                if (antiSleepCounter % 10 === 0) {
+                    sleepPrompt += "Обов'язково суворо та серйозно нагадай йому, що безпека головне, і пора з'їхати на заправку випити кави. ";
+                }
+                
+                statusElement.innerText = "Дуся: Штрикаю водія...";
+                let sleepResponse = await askDusyaAI(sleepPrompt);
+                speak(sleepResponse);
+                
+                // Примусово відкриваємо вікно мікрофона на 10 секунд після того, як вона запитала водія
+                setTimeout(() => {
+                    if (currentMode === "ANTI_SLEEP" && isListening) {
+                        isWaitingForCommand = true;
+                        clearTimeout(waitingTimer);
+                        waitingTimer = setTimeout(() => { isWaitingForCommand = false; }, 10000);
+                    }
+                }, 4000);
+
+            }, 120000); // Кожні 2 хвилини
+            return;
+        }
+
+        // 2. МИТТЄВІ КОМАНДИ КОЛЬОРУ
         if (transcript.includes("колір червоний")) { speedElement.style.color = "red"; if(recognition) recognition.stop(); speak("Зробила червоним."); return; }
         if (transcript.includes("колір зелений")) { speedElement.style.color = "#00FF00"; if(recognition) recognition.stop(); speak("Встановила зелений колір."); return; }
         if (transcript.includes("колір жовтий")) { speedElement.style.color = "yellow"; if(recognition) recognition.stop(); speak("Готово, колір жовтий."); return; }
@@ -304,7 +438,7 @@ if (SpeechRecognition) {
 
         if (transcript.includes("що ти вмієш") || transcript.includes("нагадай команди")) {
             if (recognition) recognition.stop();
-            speak("Я вмію показувати швидкість, вмикати радіо, розказувати погоду та історію місць. Також режим Ерудита (давай поговоримо), англійська та міста. Щоб зупинити мене - скажи хватить.");
+            speak("Я показую швидкість, маю автоматичний авто-гід, режим Ерудита, анти-сон, міняю кольори, вмикаю радіо та знаю відстань до Львова. Зупинити мене - скажи стоп.");
             return;
         }
 
@@ -328,7 +462,6 @@ if (SpeechRecognition) {
         let isAddressed = transcript.includes("дуся") || isWaitingForCommand;
 
         if (isAddressed) {
-            playBeep();
             dusyaBtn.style.backgroundColor = "#FFA500"; 
             clearTimeout(waitingTimer);
             isWaitingForCommand = false;
@@ -379,7 +512,7 @@ if (SpeechRecognition) {
 }
 
 // ==========================================
-// 8. КНОПКА ТА GPS
+// 8. КНОПКА ТА GPS ТРЕКІНГ
 // ==========================================
 dusyaBtn.addEventListener('click', async () => {
     if (!isListening) {
@@ -394,9 +527,10 @@ dusyaBtn.addEventListener('click', async () => {
     } else {
         isListening = false; dusyaBtn.classList.remove('active'); dusyaBtn.innerText = "Запустити Дусю";
         statusElement.innerText = "Вимкнена"; window.speechSynthesis.cancel();
+        if (antiSleepTimer) { clearInterval(antiSleepTimer); antiSleepTimer = null; }
         if (recognition) recognition.stop(); keepAliveAudio.pause();
         liveRadioPlayer.pause(); liveRadioPlayer.src = "";
-        currentMode = "DEFAULT"; chatHistory = []; isWaitingForCommand = false;
+        currentMode = "DEFAULT"; chatHistory = []; isWaitingForCommand = false; isAutoGuideActive = false;
         if (locationTimer) { clearInterval(locationTimer); locationTimer = null; }
         if (wakeLock !== null) { wakeLock.release(); wakeLock = null; }
     }
@@ -407,7 +541,10 @@ if (navigator.geolocation) {
         function(position) {
             currentLat = position.coords.latitude; currentLon = position.coords.longitude;
             let speedKmh = Math.round(position.coords.speed * 3.6);
-            if (speedKmh >= 0) { speedElement.innerText = speedKmh; }
+            if (speedKmh >= 0) { 
+                speedElement.innerText = speedKmh; 
+                gpsSpeed = speedKmh; // Синхронізуємо у глобальну змінну для команд та фільтрів
+            }
             if (speedKmh >= 100 && !said100) { speak("Попереду можуть бути камери, скинь швидкість!"); said100 = true; } 
             else if (speedKmh >= 70 && speedKmh < 100 && !said70) { speak("Тримай швидкість під контролем."); said70 = true; } 
             if (speedKmh < 50) { said70 = false; said100 = false; }
