@@ -19,7 +19,7 @@ window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices(
 // ==========================================
 // 1. НАЛАШТУВАННЯ ТА ЗМІННІ СТАНУ 
 // ==========================================
-console.log("Запуск Дусі v5.0: Міський Фарш, Сейф та Машина Часу!");
+console.log("Запуск Дусі v5.1: Повний фінальний фарш зі швидким інтернет-тестом!");
 
 const speedElement = document.getElementById('speed-display');
 const statusElement = document.getElementById('status-text');
@@ -42,7 +42,7 @@ let said100 = false;
 let currentAiRequestTime = 0; 
 let wakeLock = null;
 
-// ТАЙМЕРИ ОЧІКУВАННЯ ТА НОВІ РЕЖИМИ
+// ТАЙМЕРИ ОЧІКУВАННЯ ТА РОЗУМНІ РЕЖИМІВ
 let isWaitingForCommand = false;
 let waitingTimer = null;
 let isAutoGuideActive = false; 
@@ -50,7 +50,7 @@ let lastPlaceName = "";
 let antiSleepTimer = null;     
 let antiSleepCounter = 0;      
 
-// НОВІ ЗМІННІ ДЛЯ ВЕРСІЇ 5.0
+// ЗМІННІ ДЛЯ СЕЙФІВ ТА СПЕЦРЕЖИМІВ
 let isRecordingNote = false;   
 let currentNoteText = "";      
 let isTimeMachineActive = false;
@@ -328,7 +328,7 @@ if (SpeechRecognition) {
         // --- 1. ПЕРЕХОПЛЕННЯ ЗАМІТОК У СЕЙФ ---
         if (isRecordingNote && !transcript.includes("стоп") && !transcript.includes("хватить")) {
             currentNoteText += " " + transcript;
-            return; // Продовжуємо запис, не пускаємо команди далі
+            return; 
         }
 
         // --- 2. АВАРІЙНИЙ СТОП-КРАН ---
@@ -338,7 +338,7 @@ if (SpeechRecognition) {
             liveRadioPlayer.pause(); 
             currentMode = "DEFAULT"; chatHistory = []; 
             isWaitingForCommand = false; isRecordingNote = false; isTimeMachineActive = false;
-            resetVisuals(); // Скидаємо нічні та неонові режими
+            resetVisuals(); 
             playPing(); statusElement.innerText = "Дуся: Режим Штурмана";
             if (recognition) { try { recognition.stop(); } catch(e){} }
             speak("Зрозуміла. Мовчу, режим штурмана повернуто.");
@@ -348,6 +348,29 @@ if (SpeechRecognition) {
         if (transcript.includes("дуся") || isWaitingForCommand) { playPing(); }
         if (window.speechSynthesis.speaking) return; 
 
+        // --- ЖИВА ПЕРЕВІРКА ЯКОСТІ ІНТЕРНЕТУ (ПІНГ-ТЕСТ) ---
+        if (transcript.includes("як зв'язок") || transcript.includes("який інтернет") || transcript.includes("перевір інтернет")) {
+            if (recognition) recognition.stop();
+            statusElement.innerText = "Дуся: Перевіряю лінію...";
+            if (!navigator.onLine) {
+                speak("Мережа відсутня, ми в глухій зоні.");
+            } else {
+                const startTime = Date.now();
+                try {
+                    await fetch("https://api.open-meteo.com/v1/forecast?latitude=50&longitude=30&current=temperature_2m", { mode: 'no-cors' });
+                    const duration = Date.now() - startTime;
+                    if (duration < 600) {
+                        speak("Зв'язок відмінний, інтернет літає.");
+                    } else {
+                        speak("Зв'язок слабкий, можливі затримки у відповідях.");
+                    }
+                } catch (e) {
+                    speak("Зв'язок нестабільний або сервер не відповідає.");
+                }
+            }
+            return;
+        }
+
         // --- 3. СЕЙФ ЗАМІТОК ---
         if (transcript.includes("запиши замітку") || transcript.includes("додай замітку")) {
             isRecordingNote = true; currentNoteText = "";
@@ -355,7 +378,7 @@ if (SpeechRecognition) {
             if (recognition) recognition.stop();
             speak("Пішов запис.");
             setTimeout(() => {
-                if (!isRecordingNote) return; // Якщо скасували словом "стоп"
+                if (!isRecordingNote) return; 
                 isRecordingNote = false;
                 let existingNotes = localStorage.getItem('dusya_notes') || "";
                 if (currentNoteText.trim() !== "") {
@@ -390,7 +413,7 @@ if (SpeechRecognition) {
             if (recognition) recognition.stop();
             if (parkingData) {
                 let p = JSON.parse(parkingData);
-                window.open(`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}&travelmode=walking`, '_blank');
+                window.open(`https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}`, '_blank');
                 speak("Відкриваю пішохідний маршрут до вашого авто на картах Гугл.");
             } else { speak("Я не пам'ятаю, де ви припаркувалися. Сейф порожній."); }
             return;
@@ -529,7 +552,7 @@ if (SpeechRecognition) {
 }
 
 // ==========================================
-// 8. КНОПКА ТА GPS ТРЕКІНГ (З ІНТЕРАКТИВОМ)
+// 8. КНОПКА ТА GPS ТРЕКІНГ
 // ==========================================
 dusyaBtn.addEventListener('click', async () => {
     if (!isListening) {
@@ -561,9 +584,9 @@ if (navigator.geolocation) {
             let speedKmh = Math.round(position.coords.speed * 3.6);
             
             if (speedKmh >= 0) { 
-                // МАШИНА ЧАСУ: Аналіз різкого прискорення
+                // МАШИНА ЧАСУ: Ефект інопланетного двигуна
                 if (isTimeMachineActive && speedKmh > gpsSpeed + 3) {
-                    playSciFiAcceleration(); // Інопланетний звук при розгоні
+                    playSciFiAcceleration(); 
                 }
                 if (isTimeMachineActive && speedKmh >= 141 && !said88mph) {
                     said88mph = true; playPing();
@@ -577,7 +600,7 @@ if (navigator.geolocation) {
             // МІСЬКИЙ ЗАТОР (Traffic Jam Zen)
             if (gpsSpeed <= 7) {
                 if (jamStartTime === 0) jamStartTime = Date.now();
-                else if (Date.now() - jamStartTime > 180000 && !isJamZenActive) { // 3 хвилини
+                else if (Date.now() - jamStartTime > 180000 && !isJamZenActive) { 
                     isJamZenActive = true; currentMode = "CHATTERBOX";
                     speak("Схоже, ми застрягли у заторі. Щоб не нудьгувати, я вмикаю режим балабола. Розкажи, як настрій?");
                 }
@@ -585,7 +608,7 @@ if (navigator.geolocation) {
                 jamStartTime = 0; isJamZenActive = false;
             }
 
-            if (speedKmh >= 100 && !said100) { speak("Попереду можуть бути камери, скинь швидкість!"); said100 = true; } 
+            if (speedKmh >= 100 && !said100) { speak("Попереду можуть быть камери, скинь швидкість!"); said100 = true; } 
             else if (speedKmh >= 70 && speedKmh < 100 && !said70) { speak("Тримай швидкість під контролем."); said70 = true; } 
             if (speedKmh < 50) { said70 = false; said100 = false; }
         },
