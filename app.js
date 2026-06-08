@@ -13,7 +13,7 @@
     }
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/sw.js').catch(() => { /* sw.js поки немає */ });
+            navigator.serviceWorker.register('/sw.js').catch(() => {});
         });
     }
 })();
@@ -23,7 +23,7 @@ window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices(
 // ==========================================
 // 1. НАЛАШТУВАННЯ ТА ЗМІННІ СТАНУ 
 // ==========================================
-console.log("Запуск Дусі v5.5: Оптимізація, Дієта та Миттєва Жовта Кнопка!");
+console.log("Запуск Дусі v5.6: Велосипед, Собаки, НЛО та Харлей!");
 
 const speedElement = document.getElementById('speed-display');
 const statusElement = document.getElementById('status-text');
@@ -49,7 +49,6 @@ let waitingTimer = null;
 let isAutoGuideActive = false; 
 let lastPlaceName = "";        
 
-// ЗМІННІ ДЛЯ ЗАМІТОК, ОЧИЩЕННЯ ТА СПЕЦРЕЖИМІВ
 let isRecordingNote = false;   
 let currentNoteText = "";      
 let noteTimerInterval = null;  
@@ -67,8 +66,14 @@ let isFirstLocationCheck = true;
 let locationTimer = null;
 let gpsSpeed = 0;              
 
+// ЗМІННІ ДЛЯ ВЕЛОСИПЕДА ТА НОВИХ ЗВУКІВ
+let isBikeMode = false;
+let saidBikeFast = false;
+let activeLoopOscillators = []; 
+let activeIntervals = [];
+
 // ==========================================
-// 2. ДИНАМІЧНИЙ ІНТЕРФЕЙС (СВІТЛОФОР ТА СЕКУНДОМІР)
+// 2. ДИНАМІЧНИЙ ІНТЕРФЕЙС
 // ==========================================
 const styleInject = document.createElement('style');
 styleInject.innerHTML = `
@@ -88,7 +93,6 @@ noteOverlay.id = 'note-overlay';
 noteOverlay.innerHTML = `<div class="blink-dot"></div> <span id="note-time">00:00</span>`;
 document.body.appendChild(noteOverlay);
 
-// Моніторинг інтернету кожні 30 секунд (ОПТИМІЗОВАНО)
 setInterval(async () => {
     if (!navigator.onLine) { netIndicator.style.background = 'red'; return; }
     let start = Date.now();
@@ -111,20 +115,6 @@ saveSettingsBtn.addEventListener('click', () => {
     if (key) { localStorage.setItem('gemini_api_key', key); saveSettingsBtn.innerText = "✅ Збережено!"; setTimeout(() => { settingsModal.classList.add('hidden'); saveSettingsBtn.innerText = "Зберегти"; }, 1000); }
 });
 
-// ДЕФІБРИЛЯТОР: Перезапуск мікрофона після Ютуба
-document.addEventListener('visibilitychange', async () => {
-    if (document.visibilityState === 'visible') {
-        if (wakeLock !== null) { try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e) {} }
-        if (isListening) {
-            window.speechSynthesis.cancel();
-            if (recognition) {
-                try { recognition.abort(); } catch(e){}
-                setTimeout(() => { try { recognition.start(); statusElement.innerText = "Дуся: Знову слухаю..."; dusyaBtn.style.backgroundColor = "#00FF00"; } catch(e){} }, 500);
-            }
-        }
-    }
-});
-
 function resetVisuals() {
     document.body.style.backgroundColor = "";
     speedElement.style.color = "white";
@@ -132,8 +122,16 @@ function resetVisuals() {
     speedElement.style.textShadow = "none";
 }
 
+// Функція тотального очищення всіх фонових звуків
+function stopAllSounds() {
+    activeLoopOscillators.forEach(osc => { try { osc.stop(); osc.disconnect(); } catch(e){} });
+    activeLoopOscillators = [];
+    activeIntervals.forEach(int => clearInterval(int));
+    activeIntervals = [];
+}
+
 // ==========================================
-// 3. ЗВУКОВІ МАЯКИ ТА СИНТЕЗ МОВЛЕННЯ 
+// 3. ЗВУКОВІ МАЯКИ ТА СПЕЦЕФЕКТИ 
 // ==========================================
 function playPing() { 
     try {
@@ -177,6 +175,133 @@ function playMagicSound() {
     } catch(e){}
 }
 
+// НОВЕ: Ультразвук для собак
+function playDogRepeller() {
+    stopAllSounds();
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator(); const gain = ctx.createGain();
+        osc.type = 'sine'; 
+        // Плаваюча частота від 15kHz до 22kHz
+        osc.frequency.setValueAtTime(15000, ctx.currentTime);
+        osc.frequency.linearRampToValueAtTime(22000, ctx.currentTime + 0.5);
+        osc.frequency.linearRampToValueAtTime(15000, ctx.currentTime + 1.0);
+        
+        gain.gain.setValueAtTime(1.0, ctx.currentTime); // Максимальна гучність
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start();
+        activeLoopOscillators.push(osc);
+        
+        let interval = setInterval(() => {
+            if(osc && osc.frequency) {
+                osc.frequency.setValueAtTime(15000, ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(22000, ctx.currentTime + 0.5);
+                osc.frequency.linearRampToValueAtTime(15000, ctx.currentTime + 1.0);
+            }
+        }, 1000);
+        activeIntervals.push(interval);
+    } catch(e){}
+}
+
+// НОВЕ: Велосипедний дзвінок (Цикл)
+function playBikeBellLoop() {
+    stopAllSounds();
+    const ring = () => {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const gain = ctx.createGain(); gain.connect(ctx.destination);
+            gain.gain.setValueAtTime(0.1, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+            const osc1 = ctx.createOscillator(); osc1.type = 'sine'; osc1.frequency.setValueAtTime(2000, ctx.currentTime);
+            const osc2 = ctx.createOscillator(); osc2.type = 'triangle'; osc2.frequency.setValueAtTime(2050, ctx.currentTime);
+            osc1.connect(gain); osc2.connect(gain);
+            osc1.start(); osc2.start(); osc1.stop(ctx.currentTime + 0.5); osc2.stop(ctx.currentTime + 0.5);
+        } catch(e){}
+    };
+    ring();
+    activeIntervals.push(setInterval(ring, 2500));
+}
+
+// НОВЕ: Харлей V-Twin (Генерація)
+function playMotorcycleLoop() {
+    stopAllSounds();
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator(); const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        
+        // Створюємо низьку "дирчащу" частоту
+        osc.frequency.setValueAtTime(40, ctx.currentTime);
+        
+        // Модулюємо гучність для ефекту поршнів
+        const lfo = ctx.createOscillator();
+        lfo.type = 'sine';
+        lfo.frequency.setValueAtTime(12, ctx.currentTime); // 12 ударів на секунду
+        const lfoGain = ctx.createGain();
+        lfoGain.gain.setValueAtTime(0.8, ctx.currentTime);
+        
+        lfo.connect(lfoGain); lfoGain.connect(gain.gain);
+        
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        osc.connect(gain); gain.connect(ctx.destination);
+        
+        osc.start(); lfo.start();
+        activeLoopOscillators.push(osc); activeLoopOscillators.push(lfo);
+    } catch(e){}
+}
+
+// НОВЕ: НЛО (Космічний гул)
+function playUFOLoop() {
+    stopAllSounds();
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator(); const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(80, ctx.currentTime);
+        
+        const lfo = ctx.createOscillator();
+        lfo.type = 'sine';
+        lfo.frequency.setValueAtTime(1.5, ctx.currentTime); // Повільна пульсація
+        
+        const lfoGain = ctx.createGain();
+        lfoGain.gain.setValueAtTime(30, ctx.currentTime); // Зміна частоти
+        
+        lfo.connect(lfoGain); lfoGain.connect(osc.frequency);
+        
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        osc.connect(gain); gain.connect(ctx.destination);
+        
+        osc.start(); lfo.start();
+        activeLoopOscillators.push(osc); activeLoopOscillators.push(lfo);
+    } catch(e){}
+}
+
+// НОВЕ: Собачий гавкіт (Base64 міні)
+function playBark() {
+    stopAllSounds();
+    const barkAudio = new Audio("data:audio/mp3;base64,//OExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq/8zEAAAAAA0gAAAAATEFNRTMuMTAwqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqr/zMQAAAAADSAAAAABMYW1lMy4xMDCqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqv/MxAAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"); // Заглушка, оскільки реальний mp3 занадто довгий для тексту, ми використаємо жорсткий синтез нижче.
+    
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator(); const gain = ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(150, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 0.2);
+        gain.gain.setValueAtTime(0.8, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(); osc.stop(ctx.currentTime + 0.3);
+        
+        setTimeout(() => {
+            const osc2 = ctx.createOscillator(); const gain2 = ctx.createGain();
+            osc2.type = 'sawtooth'; osc2.frequency.setValueAtTime(200, ctx.currentTime);
+            osc2.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.4);
+            gain2.gain.setValueAtTime(1.0, ctx.currentTime); gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+            osc2.connect(gain2); gain2.connect(ctx.destination);
+            osc2.start(); osc2.stop(ctx.currentTime + 0.4);
+        }, 300);
+    } catch(e){}
+}
+
 function speak(text, onEndCallback = null) {
     if ('speechSynthesis' in window) {
         if (recognition) { try { recognition.stop(); } catch(e){} }
@@ -199,7 +324,7 @@ function speak(text, onEndCallback = null) {
                 try { 
                     recognition.start(); 
                     statusElement.innerText = "Дуся: Слухаю..."; 
-                    dusyaBtn.style.backgroundColor = "#00FF00"; // Зелений після відповіді
+                    dusyaBtn.style.backgroundColor = "#00FF00"; 
                 } catch(e) { }
             }
         };
@@ -228,8 +353,10 @@ async function checkLocationAndZone() {
 
             if (isFirstLocationCheck) {
                 isFirstLocationCheck = false; isInCityZone = isCurrentlyInCity;
-                if (isInCityZone) { speak(`Привіт! Ми зараз у місті ${currentPlaceName}. Дозволена швидкість 50 кілометрів на годину. Пристебни пасок і будь уважним.`); } 
-                else { speak(`Вітаю! Ми на трасі, навколо ${currentPlaceName}. Обмеження швидкості 90. Не забудь пристебнутися, поїхали!`); }
+                if (!isBikeMode) {
+                    if (isInCityZone) { speak(`Привіт! Ми зараз у місті ${currentPlaceName}. Дозволена швидкість 50. Пристебни пасок.`); } 
+                    else { speak(`Вітаю! Ми на трасі, навколо ${currentPlaceName}. Обмеження 90. Не забудь пристебнутися!`); }
+                }
                 return;
             }
 
@@ -240,9 +367,11 @@ async function checkLocationAndZone() {
                 speak(guideResponse); return;
             }
 
-            if (gpsSpeed > 80) { isInCityZone = false; return; }
-            if (isCurrentlyInCity && !isInCityZone) { isInCityZone = true; speak(`Попереду населений пункт ${currentPlaceName}. Скидаємо швидкість до 50.`); } 
-            else if (!isCurrentlyInCity && isInCityZone) { isInCityZone = false; speak(`Населений пункт закінчився. Попереду відкрита траса, можна 90.`); }
+            if (!isBikeMode) {
+                if (gpsSpeed > 80) { isInCityZone = false; return; }
+                if (isCurrentlyInCity && !isInCityZone) { isInCityZone = true; speak(`Попереду населений пункт ${currentPlaceName}. Скидаємо швидкість до 50.`); } 
+                else if (!isCurrentlyInCity && isInCityZone) { isInCityZone = false; speak(`Населений пункт закінчився. Можна 90.`); }
+            }
         }
     } catch(e) { }
 }
@@ -290,7 +419,9 @@ async function askDusyaAI(userQuestion) {
     const currentTimeStr = now.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
     
     let systemInstruction = "";
-    if (currentMode === "DEFAULT") {
+    if (isBikeMode) {
+        systemInstruction = `Ти - Дуся, спортивний вело-штурман. Сьогодні: ${currentDateStr}. Місце: ${currentPlaceName}. Відповідай коротко. Знаєш все про велосипеди, калорії, здоров'я та рекорди.`;
+    } else if (currentMode === "DEFAULT") {
         systemInstruction = `Ти - Дуся, авто-штурман. Сьогодні: ${currentDateStr}, час: ${currentTimeStr}. Місце: ${currentPlaceName}. Відповідай коротко.`;
     } else if (currentMode === "TALKATIVE") {
         systemInstruction = `Ти - супер-ерудована Дуся. Сьогодні: ${currentDateStr}, час: ${currentTimeStr}. Знаєш: авто, математику, філософію. На питання з медицини - додай дисклеймер ШІ.`;
@@ -338,42 +469,83 @@ if (SpeechRecognition) {
         const transcript = event.results[last][0].transcript.toLowerCase().trim();
         console.log("Дуся почула: ", transcript);
 
-        // --- МИТТЄВА ЖОВТА КНОПКА (ОПТИМІЗАЦІЯ) ---
         if (transcript.includes("дуся") || isWaitingForCommand) { 
             dusyaBtn.style.backgroundColor = "#FFA500"; 
             playPing(); 
         }
 
-        // --- 0. ДІАЛОГ ОЧИЩЕННЯ ПАМ'ЯТІ ---
         if (isWaitingForCleanupConfirm) {
             if (transcript.includes("так") || transcript.includes("очистити") || transcript.includes("видалити")) {
                 localStorage.removeItem('dusya_notes'); localStorage.removeItem('dusya_parking');
                 localStorage.setItem('dusya_last_cleanup', Date.now());
-                isWaitingForCleanupConfirm = false;
-                speak("Сейф повністю очищено. Режим штурмана увімкнено.");
+                isWaitingForCleanupConfirm = false; speak("Сейф повністю очищено.");
             } else if (transcript.includes("ні") || transcript.includes("залишити") || transcript.includes("не треба")) {
                 localStorage.setItem('dusya_last_cleanup', Date.now());
-                isWaitingForCleanupConfirm = false;
-                speak("Зрозуміла, залишаю всі записи. Режим штурмана увімкнено.");
+                isWaitingForCleanupConfirm = false; speak("Зрозуміла, залишаю всі записи.");
             } else { speak("Скажіть Так або Ні."); }
             return;
         }
 
-        // --- 1. АВАРІЙНИЙ СТОП-КРАН ---
-        if (transcript.includes("стоп") || transcript.includes("завершити") || transcript.includes("хватить") || transcript.includes("закрийся") || transcript.includes("все нормально")) {
+        // --- 1. АВАРІЙНИЙ СТОП-КРАН (СКИДАЄ ВСЕ) ---
+        if (transcript.includes("стоп") || transcript.includes("завершити") || transcript.includes("хватить") || transcript.includes("закрийся") || transcript.includes("все нормально") || transcript.includes("тихо") || transcript.includes("вимкни звук")) {
+            stopAllSounds();
+            isBikeMode = false;
             if (noteTimerInterval) { clearInterval(noteTimerInterval); noteTimerInterval = null; }
             window.speechSynthesis.cancel(); 
             currentMode = "DEFAULT"; chatHistory = []; 
             isWaitingForCommand = false; isRecordingNote = false; isTimeMachineActive = false;
             resetVisuals(); document.getElementById('note-overlay').style.display = 'none';
-            dusyaBtn.style.backgroundColor = "#00FF00"; // Скидання кольору кнопки
+            dusyaBtn.style.backgroundColor = "#00FF00"; 
             playPing(); statusElement.innerText = "Дуся: Режим Штурмана";
             if (recognition) { try { recognition.stop(); } catch(e){} }
-            speak("Зрозуміла. Мовчу, режим штурмана повернуто.");
+            speak("Зрозуміла. Всі ефекти вимкнено, режим авто-штурмана повернуто.");
             return;
         }
 
-        // --- 2. ПЕРЕХОПЛЕННЯ ЗАМІТОК СЕЙФА ---
+        // --- 2. ВЕЛО-ФІШКИ ТА ТРАНСПОРТНІ ПАСХАЛКИ ---
+        if (transcript.includes("режим велосипеда") || transcript.includes("я на велику")) {
+            isBikeMode = true;
+            document.body.style.backgroundColor = "#004d00"; // Темно-зелений
+            speedElement.style.color = "#00FF00";
+            if(recognition) recognition.stop();
+            speak("Вело-штурман активований! Крути педалі, я слідкую за маршрутом і швидкістю."); return;
+        }
+        
+        // Відлякувачі собак
+        if (transcript.includes("налякай") || transcript.includes("фас")) {
+            if(recognition) recognition.stop(); speak("Атакую!", playBark); return;
+        }
+        if (transcript.includes("собаки")) {
+            if(recognition) recognition.stop(); speak("Вмикаю ультразвуковий захист!", playDogRepeller); return;
+        }
+
+        // Розгін натовпу
+        if (transcript.includes("багато людей")) {
+            if(recognition) recognition.stop(); speak("Вмикаю попереджувальний сигнал.", playBikeBellLoop); return;
+        }
+
+        // Мотоцикл і НЛО
+        if (transcript.includes("мотоцикл") || transcript.includes("харлей")) {
+            document.body.style.backgroundColor = "#FF4500"; // Оранжевий
+            if(recognition) recognition.stop(); speak("Заводжу V-Twin. Поїхали!", playMotorcycleLoop); return;
+        }
+        if (transcript.includes("режим нло") || transcript.includes("космічний корабель")) {
+            document.body.style.backgroundColor = "#191970"; // Midnight Blue
+            speedElement.style.color = "#00FFFF"; // Cyan
+            if(recognition) recognition.stop(); speak("Гіпер-двигун активовано.", playUFOLoop); return;
+        }
+
+        // Навігація в Картах
+        let routeMatch = transcript.match(/(?:маршрут до|доїхати до|найближча)\s+(.*)/i);
+        if (routeMatch && routeMatch[1]) {
+            let target = routeMatch[1];
+            if(recognition) recognition.stop(); 
+            speak(`Відкриваю карти, будую маршрут до ${target}.`);
+            window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(target)}${isBikeMode ? '&travelmode=bicycling' : ''}`, '_blank');
+            return;
+        }
+
+        // --- 3. ЗАМІТКИ ---
         if (isRecordingNote) {
             if (transcript.includes("кінець") || transcript.includes("зберегти") || transcript.includes("кінець замітки")) {
                 isRecordingNote = false;
@@ -392,29 +564,27 @@ if (SpeechRecognition) {
 
         if (window.speechSynthesis.speaking) return; 
 
-        // --- 3. МИТТЄВІ ЛОКАЛЬНІ КОМАНДИ (БЕЗ ІНТЕРНЕТУ) ---
-        if (transcript.includes("котра година") || transcript.includes("який зараз час") || transcript.includes("який час")) {
+        // --- 4. МИТТЄВІ ЛОКАЛЬНІ КОМАНДИ ---
+        if (transcript.includes("котра година") || transcript.includes("який час")) {
             if (recognition) recognition.stop(); let localT = new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }); speak(`Зараз ${localT}.`); return;
         }
-        if (transcript.includes("яке сьогодні число") || transcript.includes("який сьогодні день") || transcript.includes("яка дата")) {
+        if (transcript.includes("яке сьогодні число") || transcript.includes("яка дата")) {
             if (recognition) recognition.stop(); let localD = new Date().toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' }); speak(`Сьогодні ${localD}.`); return;
         }
-        if (transcript.includes("де ми") || transcript.includes("яке це місто") || transcript.includes("де я знаходжусь")) {
+        if (transcript.includes("де ми") || transcript.includes("яке це місто")) {
             if (recognition) recognition.stop(); speak(`Ми зараз в районі ${currentPlaceName}.`); return;
         }
-        if (transcript.includes("яка швидкість") || transcript.includes("швидкість зараз")) {
-            if (recognition) recognition.stop(); speak(`Зараз наша швидкість ${gpsSpeed} кілометрів на годину.`); return;
+        if (transcript.includes("яка швидкість")) {
+            if (recognition) recognition.stop(); speak(`Зараз наша швидкість ${gpsSpeed}.`); return;
         }
-        if (transcript.includes("що ти вмієш") || transcript.includes("розкажи свої команди") || transcript.includes("розкажи команди")) {
-            if (recognition) recognition.stop(); speak("Я вмію записувати замітки, шукати в Ютубі, рахувати відстань до міст, міняти кольори, пам'ятати парковку та вмикати автогіда."); return;
+        if (transcript.includes("що ти вмієш") || transcript.includes("розкажи команди")) {
+            if (recognition) recognition.stop(); speak("Я вмію бути вело-штурманом, лякати собак, вмикати Харлей, записувати замітки, шукати в Ютубі та пам'ятати парковку."); return;
         }
 
-        // --- 3.5 ПАСХАЛКА ДЛЯ УЛІ (VIP-ПАСАЖИР) ---
+        // --- ПАСХАЛКА ДЛЯ УЛІ ---
         if (transcript.includes("привітай улю") || transcript.includes("привітай уля") || transcript.includes("привіт уля")) {
             if (recognition) recognition.stop();
-            document.body.style.backgroundColor = "#4B0082";
-            speedElement.style.color = "#FF1493";
-            speedElement.style.textShadow = "0 0 30px #FF1493";
+            document.body.style.backgroundColor = "#4B0082"; speedElement.style.color = "#FF1493"; speedElement.style.textShadow = "0 0 30px #FF1493";
             playMagicSound();
             speak("Ого, який важливий пасажир на борту! Привіт, Уля! Пристебни пасок, зараз буде магія! Ти слухалась тата і маму? Тоді ось тобі весела пісенька.", () => {
                 openYouTubeApp("трендові пісні для підлітків 2024");
@@ -422,60 +592,47 @@ if (SpeechRecognition) {
             return;
         }
 
-        // --- 4. ПРЯМИЙ YOUTUBE (ЗАМІСТЬ РАДІО) ---
+        // --- YOUTUBE ---
         let ytMatch = transcript.match(/(?:включи|відкрий|знайди)\s+(?:пісню|музику|в ютубі|на ютубі|ютуб)?\s*(.*)/i);
         if (ytMatch && ytMatch[1] && ytMatch[1].trim() !== "") {
             let ytQuery = ytMatch[1].trim(); if (recognition) recognition.stop(); speak(`Відкриваю ${ytQuery} на Ютубі.`); openYouTubeApp(ytQuery); return;
         }
 
-        // --- 5. ЗМІНА КОЛЬОРУ СПІДОМЕТРА ---
+        // --- ЗМІНА КОЛЬОРУ ---
         if (transcript.includes("колір червоний")) { speedElement.style.color = "red"; if(recognition) recognition.stop(); speak("Колір червоний."); return; }
         if (transcript.includes("колір зелений")) { speedElement.style.color = "#00FF00"; if(recognition) recognition.stop(); speak("Колір зелений."); return; }
         if (transcript.includes("колір жовтий")) { speedElement.style.color = "yellow"; if(recognition) recognition.stop(); speak("Колір жовтий."); return; }
         if (transcript.includes("колір білий")) { speedElement.style.color = "white"; if(recognition) recognition.stop(); speak("Колір білий."); return; }
         if (transcript.includes("колір синій")) { speedElement.style.color = "#00BFFF"; if(recognition) recognition.stop(); speak("Колір синій."); return; }
 
-        // --- 6. ЗАМІТКИ З ЖИВИМ СЕКУНДОМІРОМ ---
+        // --- ЗАМІТКИ ТА СЕКУНДОМІР ---
         if (transcript.includes("запиши замітку") || transcript.includes("додай замітку")) {
             isRecordingNote = true; currentNoteText = "";
             let noteStartTime = Date.now();
             if (noteTimerInterval) clearInterval(noteTimerInterval);
-            
-            const overlay = document.getElementById('note-overlay');
-            const timeSpan = document.getElementById('note-time');
+            const overlay = document.getElementById('note-overlay'); const timeSpan = document.getElementById('note-time');
             overlay.style.display = 'flex';
-            
             noteTimerInterval = setInterval(() => {
                 let elapsedSecs = Math.floor((Date.now() - noteStartTime) / 1000);
                 let mins = String(Math.floor(elapsedSecs / 60)).padStart(2, '0');
                 let secs = String(elapsedSecs % 60).padStart(2, '0');
                 timeSpan.innerText = `${mins}:${secs}`;
             }, 1000);
-
             if (recognition) recognition.stop(); speak("Слухаю. Коли закінчиш, скажи Кінець."); return;
         }
-        if (transcript.includes("прочитай замітки") || transcript.includes("що я наговорив") || transcript.includes("мої замітки")) {
+        if (transcript.includes("прочитай замітки") || transcript.includes("мої замітки")) {
             let notes = localStorage.getItem('dusya_notes'); if (recognition) recognition.stop();
-            if (notes) speak("У сейфі є такі записи: " + notes); else speak("Сейф порожній, заміток немає."); return;
+            if (notes) speak("У сейфі є такі записи: " + notes); else speak("Сейф порожній."); return;
         }
-        if (transcript.includes("видали всі замітки") || transcript.includes("зітри всі замітки") || transcript.includes("очистити сейф")) {
+        if (transcript.includes("видали всі замітки") || transcript.includes("очистити сейф")) {
             localStorage.removeItem('dusya_notes'); if (recognition) recognition.stop(); speak("Сейф порожній, всі замітки видалено."); return;
-        }
-
-        // --- ДИНАМІЧНИЙ ПРОРАХУНОК ВІДСТАНІ ДО БУДЬ-ЯКОГО МІСТА ---
-        let distanceMatch = transcript.match(/(?:відстань до|скільки до|далеко до)\s+([а-яєіїґ-]+)/i);
-        if (distanceMatch) {
-            let targetCity = distanceMatch[1]; if (recognition) recognition.stop();
-            statusElement.innerText = `Дуся: Рахую до міста ${targetCity}...`;
-            let distanceRes = await askDusyaAI(`Ми зараз в ${currentPlaceName}. Обчесли приблизну відстань до міста ${targetCity}. Дай коротку відповідь в один рядок.`);
-            speak(distanceRes); return;
         }
 
         // --- ПАРКУВАЛЬНА ПАМ'ЯТЬ ---
         if (transcript.includes("запам'ятай парковку") || transcript.includes("запам'ятай машину")) {
             if (currentLat && currentLon) {
                 localStorage.setItem('dusya_parking', JSON.stringify({lat: currentLat, lon: currentLon}));
-                if (recognition) recognition.stop(); speak("Координати парковки збережено у сейф.");
+                if (recognition) recognition.stop(); speak("Координати збережено.");
             } else { if (recognition) recognition.stop(); speak("Немає сигналу GPS."); }
             return;
         }
@@ -483,17 +640,12 @@ if (SpeechRecognition) {
             let parkingData = localStorage.getItem('dusya_parking'); if (recognition) recognition.stop();
             if (parkingData) {
                 let p = JSON.parse(parkingData); window.open(`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}&travelmode=walking`, '_blank');
-                speak("Відкриваю пішохідний маршрут до авто.");
+                speak("Відкриваю маршрут до авто.");
             } else { speak("Я не пам'ятаю, де ви припаркувалися."); }
             return;
         }
 
-        // --- ВІЗУАЛЬНІ РЕЖИМИ ТА МАШИНА ЧАСУ ---
-        if (transcript.includes("нічний режим")) {
-            document.body.style.backgroundColor = "#000000"; speedElement.style.color = "#8B0000"; speedElement.style.textShadow = "none";
-            if (recognition) recognition.stop(); speak("Нічний екран увімкнено."); return;
-        }
-        if (transcript.includes("денний режим")) { resetVisuals(); if (recognition) recognition.stop(); speak("Денний екран увімкнено."); return; }
+        // --- МАШИНА ЧАСУ ---
         if (transcript.includes("машина часу") || transcript.includes("назад у майбутнє")) {
             isTimeMachineActive = true; said88mph = false; document.body.style.backgroundColor = "#000000";
             speedElement.style.fontFamily = "'Courier New', Courier, monospace"; speedElement.style.color = "#00FF00"; speedElement.style.textShadow = "0 0 20px #00FF00";
@@ -501,21 +653,12 @@ if (SpeechRecognition) {
         }
 
         // --- РЕЖИМИ ТА ПОГОДА ---
-        if (transcript.includes("увімкни авто-гіда") || transcript.includes("увімкни автогіда")) {
-            isAutoGuideActive = true; lastPlaceName = currentPlaceName; if (recognition) recognition.stop(); speak("Авто-гід увімкнено."); return;
-        }
-        if (transcript.includes("вимкни авто-гіда") || transcript.includes("вимкни автогіда")) {
-            isAutoGuideActive = false; if (recognition) recognition.stop(); speak("Авто-гід вимкнено."); return;
-        }
-
-        if (transcript.includes("режим балабола") || transcript.includes("режим балабол") || transcript.includes("будь балаболом")) {
+        if (transcript.includes("режим балабола") || transcript.includes("будь балаболом")) {
             currentMode = "CHATTERBOX"; if (recognition) recognition.stop();
             speak("О, це мій улюблений режим! Вмикаю Балабола. Ну що, розкажи, як настрій сьогодні в дорозі?");
             isWaitingForCommand = true; clearTimeout(waitingTimer); waitingTimer = setTimeout(() => { isWaitingForCommand = false; }, 10000); return;
         }
-
         if (transcript.includes("погода")) { let city = null; let match = transcript.match(/погода\s+(?:в|у)\s+([а-яєіїґ-]+)/i); if (match) city = match[1]; handleWeatherCommand(city); return; }
-        if (transcript.includes("давай поговоримо") || transcript.includes("поспілкуємось")) { currentMode = "TALKATIVE"; if (recognition) recognition.stop(); speak("Вмикаю режим Ерудита. Про що поговоримо?"); return; }
 
         let isAddressed = transcript.includes("дуся") || isWaitingForCommand;
 
@@ -534,7 +677,7 @@ if (SpeechRecognition) {
                 if (recognition) recognition.stop(); 
                 
                 const aiResponse = await askDusyaAI(cleanQuery);
-                dusyaBtn.style.backgroundColor = "#00FF00"; // Зелений, коли говорить
+                dusyaBtn.style.backgroundColor = "#00FF00"; 
                 statusElement.innerText = "Дуся: Говорю..."; speak(aiResponse);
 
                 if (currentMode === "CHATTERBOX") {
@@ -561,7 +704,7 @@ if (SpeechRecognition) {
 dusyaBtn.addEventListener('click', async () => {
     if (!isListening) {
         isListening = true; dusyaBtn.classList.add('active'); dusyaBtn.innerText = "Дуся Активна";
-        dusyaBtn.style.backgroundColor = "#00FF00"; // Встановлюємо зелений при старті
+        dusyaBtn.style.backgroundColor = "#00FF00"; 
         statusElement.innerText = "Дуся: Слухаю..."; keepAliveAudio.play().catch(e => {});
         try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
         
@@ -570,7 +713,6 @@ dusyaBtn.addEventListener('click', async () => {
         locationTimer = setInterval(checkLocationAndZone, 60000); 
         setTimeout(checkLocationAndZone, 1500);
 
-        // ПЕРЕВІРКА ОЧИЩЕННЯ РАЗ НА МІСЯЦЬ
         let lastCleanup = localStorage.getItem('dusya_last_cleanup');
         let nowTime = Date.now();
         if (!lastCleanup) { localStorage.setItem('dusya_last_cleanup', nowTime); } 
@@ -582,12 +724,12 @@ dusyaBtn.addEventListener('click', async () => {
 
     } else {
         isListening = false; dusyaBtn.classList.remove('active'); dusyaBtn.innerText = "Запустити Дусю";
-        dusyaBtn.style.backgroundColor = ""; // Скидаємо колір при вимкненні
-        statusElement.innerText = "Вимкнена"; window.speechSynthesis.cancel();
+        dusyaBtn.style.backgroundColor = ""; 
+        statusElement.innerText = "Вимкнена"; window.speechSynthesis.cancel(); stopAllSounds();
         if (noteTimerInterval) { clearInterval(noteTimerInterval); noteTimerInterval = null; }
         if (recognition) recognition.stop(); keepAliveAudio.pause();
         currentMode = "DEFAULT"; chatHistory = []; isWaitingForCommand = false; isAutoGuideActive = false;
-        isTimeMachineActive = false; isRecordingNote = false; isWaitingForCleanupConfirm = false; resetVisuals();
+        isTimeMachineActive = false; isRecordingNote = false; isWaitingForCleanupConfirm = false; isBikeMode = false; resetVisuals();
         document.getElementById('note-overlay').style.display = 'none';
         if (locationTimer) { clearInterval(locationTimer); locationTimer = null; }
         if (wakeLock !== null) { wakeLock.release(); wakeLock = null; }
@@ -609,17 +751,27 @@ if (navigator.geolocation) {
                 gpsSpeed = speedKmh; 
             }
 
-            if (gpsSpeed <= 7) {
-                if (jamStartTime === 0) jamStartTime = Date.now();
-                else if (Date.now() - jamStartTime > 180000 && !isJamZenActive) { 
-                    isJamZenActive = true; currentMode = "CHATTERBOX";
-                    speak("Схоже, ми застрягли у заторі. Щоб не нудьгувати, я вмикаю режим балабола.");
+            // Велосипедний ліміт
+            if (isBikeMode) {
+                if (speedKmh >= 40 && !saidBikeFast) {
+                    speak("Не спіши, будь уважний!!! Агов!!"); saidBikeFast = true;
+                } else if (speedKmh < 35 && saidBikeFast) {
+                    speak("Молодець. Так краще."); saidBikeFast = false;
                 }
-            } else { jamStartTime = 0; isJamZenActive = false; }
+            } else {
+                // Автомобільний ліміт
+                if (gpsSpeed <= 7) {
+                    if (jamStartTime === 0) jamStartTime = Date.now();
+                    else if (Date.now() - jamStartTime > 180000 && !isJamZenActive) { 
+                        isJamZenActive = true; currentMode = "CHATTERBOX";
+                        speak("Схоже, ми застрягли у заторі. Щоб не нудьгувати, я вмикаю режим балабола.");
+                    }
+                } else { jamStartTime = 0; isJamZenActive = false; }
 
-            if (speedKmh >= 100 && !said100) { speak("Попереду можуть бути камери, скинь швидкість!"); said100 = true; } 
-            else if (speedKmh >= 70 && speedKmh < 100 && !said70) { speak("Тримай швидкість під контролем."); said70 = true; } 
-            if (speedKmh < 50) { said70 = false; said100 = false; }
+                if (speedKmh >= 100 && !said100) { speak("Попереду можуть бути камери, скинь швидкість!"); said100 = true; } 
+                else if (speedKmh >= 70 && speedKmh < 100 && !said70) { speak("Тримай швидкість під контролем."); said70 = true; } 
+                if (speedKmh < 50) { said70 = false; said100 = false; }
+            }
         },
         function(error) { }, { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
     );
