@@ -1,16 +1,21 @@
 // ==========================================
-// 0. ПАРОЛЬ НА ВХІД
+// 0. ПАРОЛЬ НА ВХІД ТА PWA (ОФЛАЙН РЕЖИМ)
 // ==========================================
 (function() {
     const isAuth = localStorage.getItem('dusya_auth');
     if (isAuth !== '2811') {
         let pass = prompt("Введіть пароль для доступу до Дусі:");
-        if (pass === "2811") {
-            localStorage.setItem('dusya_auth', '2811');
-        } else {
-            document.body.innerHTML = "<h2 style='color:red; text-align:center; padding-top:20vh; font-family:sans-serif;'>Доступ заборонено. Оновіть сторінку.</h2>";
+        if (pass === "2811") { localStorage.setItem('dusya_auth', '2811'); } 
+        else {
+            document.body.innerHTML = "<h2 style='color:red; text-align:center; padding-top:20vh; font-family:sans-serif;'>Доступ заборонено.</h2>";
             throw new Error("Зупинка скрипта: невірний пароль.");
         }
+    }
+    // Заділ під майбутній Service Worker для запуску взагалі без інтернету
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js').catch(() => { /* sw.js поки немає, але код готовий */ });
+        });
     }
 })();
 
@@ -19,7 +24,7 @@ window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices(
 // ==========================================
 // 1. НАЛАШТУВАННЯ ТА ЗМІННІ СТАНУ 
 // ==========================================
-console.log("Запуск Дусі v5.2: Стабільна версія, замітки з живим таймером та вільний вибір міст!");
+console.log("Запуск Дусі v5.3: Тотальний Ютуб, Світлофор Інтернету та Візуальні Замітки!");
 
 const speedElement = document.getElementById('speed-display');
 const statusElement = document.getElementById('status-text');
@@ -34,26 +39,21 @@ const closeSettingsBtn = document.getElementById('close-settings-btn');
 
 let currentMode = "DEFAULT"; 
 let chatHistory = [];        
-let lastMusicQuery = "";     
 
 let isListening = false;      
 let said70 = false;
 let said100 = false;
-let currentAiRequestTime = 0; 
 let wakeLock = null;
 
-// ТАЙМЕРИ ОЧІКУВАННЯ ТА РОЗУМНИХ РЕЖИМІВ
 let isWaitingForCommand = false;
 let waitingTimer = null;
 let isAutoGuideActive = false; 
 let lastPlaceName = "";        
-let antiSleepTimer = null;     
-let antiSleepCounter = 0;      
 
-// ЗМІННІ ДЛЯ СЕЙФІВ ТА СПЕЦРЕЖИМІВ
+// ЗМІННІ ДЛЯ ЗАМІТОК ТА СПЕЦРЕЖИМІВ
 let isRecordingNote = false;   
 let currentNoteText = "";      
-let noteTimerInterval = null;  // Інтервал для живого секундоміра
+let noteTimerInterval = null;  
 let isTimeMachineActive = false;
 let said88mph = false;
 let jamStartTime = 0;          
@@ -67,24 +67,37 @@ let isFirstLocationCheck = true;
 let locationTimer = null;
 let gpsSpeed = 0;              
 
-let liveRadioPlayer = new Audio();
-const radioStations = {
-    "рокс": "https://online.radioroks.ua/RadioROKS", "хіт": "https://online.hitfm.ua/HitFM",
-    "люкс": "https://icecast.luxnet.ua/lux", "байрактар": "https://online.radiobayraktar.com.ua/RadioBayraktar",
-    "ера": "https://icecast.nv.ua/NV", "нв": "https://icecast.nv.ua/NV",
-    "промінь": "https://radio.nrcu.gov.ua:8000/promin-mp3", "п'ятниця": "https://radio.radiopyatnica.com.ua:8000/radiopyatnica",
-    "kiss": "https://online.kissfm.ua/KissFM", "мелодія": "https://online.melodiafm.ua/MelodiaFM",
-    "комерціал": "https://wms.escuta.com/comercial", "comercial": "https://wms.escuta.com/comercial",
-    "рфм": "https://streaming-live.rtp.pt/liveradio/rfm/hd/live.m3u8", "rfm": "https://streaming-live.rtp.pt/liveradio/rfm/hd/live.m3u8",
-    "м80": "https://wms.escuta.com/m80", "m80": "https://wms.escuta.com/m80",
-    "антена": "https://streaming-live.rtp.pt/liveradio/antena1/hd/live.m3u8", "ренасенса": "https://rrstreaming.rr.sapo.pt/rr_hd"
-};
+// ==========================================
+// 2. ДИНАМІЧНИЙ ІНТЕРФЕЙС (СВІТЛОФОР ТА СЕКУНДОМІР)
+// ==========================================
+const styleInject = document.createElement('style');
+styleInject.innerHTML = `
+    #net-indicator { position:fixed; top:20px; right:20px; width:15px; height:15px; border-radius:50%; background:gray; z-index:9999; box-shadow: 0 0 8px rgba(0,0,0,0.8); transition: background 0.5s; }
+    #note-overlay { position:fixed; top:20px; left:20px; background:rgba(220,20,60,0.9); color:white; padding:10px 20px; border-radius:20px; font-size:20px; font-family:sans-serif; font-weight:bold; z-index:9999; display:none; align-items:center; box-shadow: 0 0 15px rgba(220,20,60,0.8); }
+    .blink-dot { width:12px; height:12px; background:white; border-radius:50%; margin-right:10px; animation: blinker 1s linear infinite; }
+    @keyframes blinker { 50% { opacity: 0; } }
+`;
+document.head.appendChild(styleInject);
 
-// ==========================================
-// 2. МОНІТОРИНГ ІНТЕРНЕТУ ТА ІНТЕРФЕЙСУ
-// ==========================================
-window.addEventListener('online', () => { speak("Інтернет відновлено. Я знову на зв'язку!"); });
-window.addEventListener('offline', () => { speak("Зник інтернет. Тимчасово не зможу відповідати на запитання, але спідометр працює."); });
+const netIndicator = document.createElement('div');
+netIndicator.id = 'net-indicator';
+document.body.appendChild(netIndicator);
+
+const noteOverlay = document.createElement('div');
+noteOverlay.id = 'note-overlay';
+noteOverlay.innerHTML = `<div class="blink-dot"></div> <span id="note-time">00:00</span>`;
+document.body.appendChild(noteOverlay);
+
+// Моніторинг інтернету кожні 10 секунд
+setInterval(async () => {
+    if (!navigator.onLine) { netIndicator.style.background = 'red'; return; }
+    let start = Date.now();
+    try {
+        await fetch("https://api.open-meteo.com/v1/forecast?latitude=50&longitude=30&current=temperature_2m", {mode: 'no-cors', cache: 'no-store'});
+        let duration = Date.now() - start;
+        netIndicator.style.background = duration < 800 ? '#00FF00' : 'yellow'; 
+    } catch(e) { netIndicator.style.background = 'red'; }
+}, 10000);
 
 window.addEventListener('DOMContentLoaded', () => {
     try { const savedKey = localStorage.getItem('gemini_api_key'); if (savedKey) apiKeyInput.value = savedKey; } catch (e) { }
@@ -95,10 +108,7 @@ settingsBtn.addEventListener('click', () => settingsModal.classList.remove('hidd
 closeSettingsBtn.addEventListener('click', () => settingsModal.classList.add('hidden'));
 saveSettingsBtn.addEventListener('click', () => {
     const key = apiKeyInput.value.trim();
-    if (key) {
-        localStorage.setItem('gemini_api_key', key); saveSettingsBtn.innerText = "✅ Збережено!";
-        setTimeout(() => { settingsModal.classList.add('hidden'); saveSettingsBtn.innerText = "Зберегти"; }, 1000);
-    }
+    if (key) { localStorage.setItem('gemini_api_key', key); saveSettingsBtn.innerText = "✅ Збережено!"; setTimeout(() => { settingsModal.classList.add('hidden'); saveSettingsBtn.innerText = "Зберегти"; }, 1000); }
 });
 
 document.addEventListener('visibilitychange', async () => {
@@ -177,23 +187,12 @@ function speak(text) {
     }
 }
 
-// ==========================================
-// 4. МУЛЬТИМЕДІА
-// ==========================================
 function openYouTubeApp(query) {
-    liveRadioPlayer.pause();
     window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, '_blank');
 }
 
-function playLiveRadio(stationName) {
-    let streamUrl = ""; const lowerName = stationName.toLowerCase();
-    for (let key in radioStations) { if (lowerName.includes(key)) { streamUrl = radioStations[key]; break; } }
-    if (streamUrl) { liveRadioPlayer.src = streamUrl; liveRadioPlayer.play().catch(e => {}); return true; }
-    return false; 
-}
-
 // ==========================================
-// 5. GPS КАРТИ, ПОГОДА ТА ЗОНИ 
+// 4. GPS КАРТИ, ПОГОДА ТА ЗОНИ 
 // ==========================================
 async function checkLocationAndZone() {
     if (!currentLat || !currentLon) return;
@@ -216,9 +215,8 @@ async function checkLocationAndZone() {
             if (isAutoGuideActive && place && place !== lastPlaceName) {
                 lastPlaceName = place;
                 statusElement.innerText = "Дуся: Авто-гід розповідає...";
-                let guideResponse = await askDusyaAI(`Ми зараз проїжджаємо або в'їжджаємо в населений пункт ${place}. Розкажи один короткий, але дуже цікавий історичний факт. Обмеження: максимум 2-3 речення. Якщо реальних фактів немає - не вигадуй.`);
-                speak(guideResponse);
-                return;
+                let guideResponse = await askDusyaAI(`Ми зараз проїжджаємо населений пункт ${place}. Розкажи короткий цікавий історичний факт. 2-3 речення.`);
+                speak(guideResponse); return;
             }
 
             if (gpsSpeed > 80) { isInCityZone = false; return; }
@@ -259,7 +257,7 @@ async function handleWeatherCommand(city) {
 }
 
 // ==========================================
-// 6. МІЗКИ ШІ
+// 5. МІЗКИ ШІ
 // ==========================================
 async function askDusyaAI(userQuestion) {
     if (!navigator.onLine) return "Немає зв'язку з інтернетом.";
@@ -276,14 +274,7 @@ async function askDusyaAI(userQuestion) {
     } else if (currentMode === "TALKATIVE") {
         systemInstruction = `Ти - супер-ерудована Дуся. Сьогодні: ${currentDateStr}, час: ${currentTimeStr}. Знаєш: авто, математику, філософію. На питання з медицини - додай дисклеймер ШІ.`;
     } else if (currentMode === "CHATTERBOX") {
-        systemInstruction = `Ти - Дуся в режимі "Балабол". Твоя мета - розважати водія (ідеально для заторів). Розказуй цікаві байки, веселі історії з життя, жартуй. 
-        ГОЛОВНЕ ПРАВИЛО: В кінці кожної своєї репліки ти ОБОВ'ЯЗКОВО ставиш водію питання, щоб продовжити бесіду.`;
-    } else if (currentMode === "ANTI_SLEEP") {
-        systemInstruction = `Ти - Дуся в режимі Будильника! Рятуй водія від сну. Говори бадьоро, став каверзні питання про дорогу. Пропонуй важкий рок. Залучай до бесіди!`;
-    } else if (currentMode === "ENGLISH") {
-        systemInstruction = `Ти - вчителька англійської. Назви ОДНЕ слово українською, чекай переклад.`;
-    } else if (currentMode === "GAMES_CITIES") {
-        systemInstruction = `Ми граємо у 'Міста'. Назви місто на потрібну літеру.`;
+        systemInstruction = `Ти - Дуся в режимі "Балабол". Твоя мета - розважати водія в заторах. Розказуй цікаві байки, жартуй. В кінці кожної репліки ти ОБОВ'ЯЗКОВО ставиш водію питання.`;
     }
 
     if (chatHistory.length > 0 && chatHistory[chatHistory.length - 1].role === "user") { chatHistory.pop(); }
@@ -312,7 +303,7 @@ async function askDusyaAI(userQuestion) {
 }
 
 // ==========================================
-// 7. РОЗПІЗНАВАННЯ ТА ОБРОБКА КОМАНД
+// 6. РОЗПІЗНАВАННЯ ТА ОБРОБКА КОМАНД
 // ==========================================
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition;
@@ -326,26 +317,25 @@ if (SpeechRecognition) {
         const transcript = event.results[last][0].transcript.toLowerCase().trim();
         console.log("Дуся почула: ", transcript);
 
-        // --- 1. АВАРІЙНИЙ СТОП-КРАН ТА ОЧИЩЕННЯ ТАЙМЕРІВ ---
-        if (transcript.includes("стоп") || transcript.includes("завершити") || transcript.includes("хватить") || transcript.includes("закрийся") || transcript.includes("не пизди") || transcript.includes("все нормально")) {
-            if (antiSleepTimer) { clearInterval(antiSleepTimer); antiSleepTimer = null; }
+        // --- 1. АВАРІЙНИЙ СТОП-КРАН ---
+        if (transcript.includes("стоп") || transcript.includes("завершити") || transcript.includes("хватить") || transcript.includes("закрийся") || transcript.includes("все нормально")) {
             if (noteTimerInterval) { clearInterval(noteTimerInterval); noteTimerInterval = null; }
             window.speechSynthesis.cancel(); 
-            liveRadioPlayer.pause(); 
             currentMode = "DEFAULT"; chatHistory = []; 
             isWaitingForCommand = false; isRecordingNote = false; isTimeMachineActive = false;
-            resetVisuals(); 
+            resetVisuals(); document.getElementById('note-overlay').style.display = 'none';
             playPing(); statusElement.innerText = "Дуся: Режим Штурмана";
             if (recognition) { try { recognition.stop(); } catch(e){} }
             speak("Зрозуміла. Мовчу, режим штурмана повернуто.");
             return;
         }
 
-        // --- 2. ПЕРЕХОПЛЕННЯ НЕОБМЕЖЕНИХ ЗАМІТОК СЕЙФА ---
+        // --- 2. ПЕРЕХОПЛЕННЯ ЗАМІТОК СЕЙФА ---
         if (isRecordingNote) {
-            if (transcript.includes("зберегти замітку") || transcript.includes("зберегти")) {
+            if (transcript.includes("кінець") || transcript.includes("зберегти") || transcript.includes("кінець замітки")) {
                 isRecordingNote = false;
                 if (noteTimerInterval) { clearInterval(noteTimerInterval); noteTimerInterval = null; }
+                document.getElementById('note-overlay').style.display = 'none';
                 let existingNotes = localStorage.getItem('dusya_notes') || "";
                 if (currentNoteText.trim() !== "") {
                     localStorage.setItem('dusya_notes', existingNotes + (existingNotes ? " | " : "") + currentNoteText.trim());
@@ -353,89 +343,78 @@ if (SpeechRecognition) {
                 } else { speak("Запис порожній."); }
                 statusElement.innerText = "Дуся: Слухаю...";
                 if (recognition) { try { recognition.stop(); } catch(e){} }
-            } else {
-                currentNoteText += " " + transcript;
-            }
+            } else { currentNoteText += " " + transcript; }
             return; 
         }
 
         if (transcript.includes("дуся") || isWaitingForCommand) { playPing(); }
         if (window.speechSynthesis.speaking) return; 
 
-        // --- ЛОКАЛЬНІ МИТТЄВІ КОМАНДИ ЧАСУ ТА ДАТИ (БЕЗ ІНТЕРНЕТУ) ---
+        // --- 3. МИТТЄВІ ЛОКАЛЬНІ КОМАНДИ (БЕЗ ІНТЕРНЕТУ) ---
         if (transcript.includes("котра година") || transcript.includes("який зараз час") || transcript.includes("який час")) {
-            if (recognition) recognition.stop();
-            let localT = new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+            if (recognition) recognition.stop(); let localT = new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
             speak(`Зараз ${localT}.`); return;
         }
         if (transcript.includes("яке сьогодні число") || transcript.includes("який сьогодні день") || transcript.includes("яка дата")) {
-            if (recognition) recognition.stop();
-            let localD = new Date().toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' });
+            if (recognition) recognition.stop(); let localD = new Date().toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' });
             speak(`Сьогодні ${localD}.`); return;
         }
-
-        // --- ЖИВА ПЕРЕВІРКА ЯКОСТІ ІНТЕРНЕТУ (ПІНГ-ТЕСТ) ---
-        if (transcript.includes("як зв'язок") || transcript.includes("який інтернет") || transcript.includes("перевір інтернет")) {
-            if (recognition) recognition.stop();
-            statusElement.innerText = "Дуся: Перевіряю лінію...";
-            if (!navigator.onLine) {
-                speak("Мережа відсутня, ми в глухій зоні.");
-            } else {
-                const startTime = Date.now();
-                try {
-                    await fetch("https://api.open-meteo.com/v1/forecast?latitude=50&longitude=30&current=temperature_2m", { mode: 'no-cors' });
-                    const duration = Date.now() - startTime;
-                    if (duration < 600) speak("Зв'язок відмінний, інтернет літає.");
-                    else speak("Зв'язок слабкий, можливі затримки у відповідях.");
-                } catch (e) { speak("Зв'язок нестабільний."); }
-            }
-            return;
+        if (transcript.includes("де ми") || transcript.includes("яке це місто") || transcript.includes("де я знаходжусь")) {
+            if (recognition) recognition.stop(); speak(`Ми зараз в районі ${currentPlaceName}.`); return;
+        }
+        if (transcript.includes("яка швидкість") || transcript.includes("швидкість зараз")) {
+            if (recognition) recognition.stop(); speak(`Зараз наша швидкість ${gpsSpeed} кілометрів на годину.`); return;
         }
 
-        // --- ПРЯМА КАНАЛІЗАЦІЯ НА YOUTUBE БЕЗ ШІ ---
-        if (transcript.includes("знайди в ютубі") || transcript.includes("включи в ютубі") || transcript.includes("пошук в ютубі")) {
-            let ytQuery = transcript.replace(/(?:знайди в ютубі|включи в ютубі|пошук в ютубі)/gi, "").trim();
+        // --- 4. ПРЯМИЙ YOUTUBE (ЗАМІСТЬ РАДІО) ---
+        let ytMatch = transcript.match(/(?:включи|відкрий|знайди)\s+(?:пісню|музику|в ютубі|на ютубі|ютуб)?\s*(.*)/i);
+        if (ytMatch && ytMatch[1] && ytMatch[1].trim() !== "") {
+            let ytQuery = ytMatch[1].trim();
             if (recognition) recognition.stop();
-            speak(`Шукаю ${ytQuery} на Ютубі.`);
+            speak(`Відкриваю ${ytQuery} на Ютубі.`);
             openYouTubeApp(ytQuery); return;
         }
 
-        // --- СЕЙФ ЗАМІТОК З ЖИВИМ СЕКУНДОМІРОМ ---
+        // --- 5. ЗМІНА КОЛЬОРУ СПІДОМЕТРА ---
+        if (transcript.includes("колір червоний")) { speedElement.style.color = "red"; if(recognition) recognition.stop(); speak("Колір червоний."); return; }
+        if (transcript.includes("колір зелений")) { speedElement.style.color = "#00FF00"; if(recognition) recognition.stop(); speak("Колір зелений."); return; }
+        if (transcript.includes("колір жовтий")) { speedElement.style.color = "yellow"; if(recognition) recognition.stop(); speak("Колір жовтий."); return; }
+        if (transcript.includes("колір білий")) { speedElement.style.color = "white"; if(recognition) recognition.stop(); speak("Колір білий."); return; }
+        if (transcript.includes("колір синій")) { speedElement.style.color = "#00BFFF"; if(recognition) recognition.stop(); speak("Колір синій."); return; }
+
+        // --- 6. ЗАМІТКИ З ЖИВИМ СЕКУНДОМІРОМ ---
         if (transcript.includes("запиши замітку") || transcript.includes("додай замітку")) {
             isRecordingNote = true; currentNoteText = "";
             let noteStartTime = Date.now();
             if (noteTimerInterval) clearInterval(noteTimerInterval);
             
-            // Запуск живого секундоміра на екрані
+            const overlay = document.getElementById('note-overlay');
+            const timeSpan = document.getElementById('note-time');
+            overlay.style.display = 'flex';
+            
             noteTimerInterval = setInterval(() => {
                 let elapsedSecs = Math.floor((Date.now() - noteStartTime) / 1000);
                 let mins = String(Math.floor(elapsedSecs / 60)).padStart(2, '0');
                 let secs = String(elapsedSecs % 60).padStart(2, '0');
-                statusElement.innerText = `Дуся: 🔴 Запис [${mins}:${secs}]... Скажіть 'Зберегти'`;
+                timeSpan.innerText = `${mins}:${secs}`;
             }, 1000);
 
-            if (recognition) recognition.stop();
-            speak("Слухаю. Коли закінчиш, скажи слово Зберегти.");
-            return;
+            if (recognition) recognition.stop(); speak("Слухаю. Коли закінчиш, скажи Кінець."); return;
         }
         if (transcript.includes("прочитай замітки") || transcript.includes("що я наговорив") || transcript.includes("мої замітки")) {
-            let notes = localStorage.getItem('dusya_notes');
-            if (recognition) recognition.stop();
-            if (notes) speak("У сейфі є такі записи: " + notes); else speak("Сейф порожній, заміток немає.");
-            return;
+            let notes = localStorage.getItem('dusya_notes'); if (recognition) recognition.stop();
+            if (notes) speak("У сейфі є такі записи: " + notes); else speak("Сейф порожній, заміток немає."); return;
         }
-        if (transcript.includes("видали всі замітки") || transcript.includes("зітри всі замітки") || transcript.includes("очистити сейф заміток")) {
-            localStorage.removeItem('dusya_notes');
-            if (recognition) recognition.stop(); speak("Сейф порожній, всі замітки видалено."); return;
+        if (transcript.includes("видали всі замітки") || transcript.includes("зітри всі замітки") || transcript.includes("очистити сейф")) {
+            localStorage.removeItem('dusya_notes'); if (recognition) recognition.stop(); speak("Сейф порожній, всі замітки видалено."); return;
         }
 
         // --- ДИНАМІЧНИЙ ПРОРАХУНОК ВІДСТАНІ ДО БУДЬ-ЯКОГО МІСТА ---
         let distanceMatch = transcript.match(/(?:відстань до|скільки до|далеко до)\s+([а-яєіїґ-]+)/i);
         if (distanceMatch) {
-            let targetCity = distanceMatch[1];
-            if (recognition) recognition.stop();
+            let targetCity = distanceMatch[1]; if (recognition) recognition.stop();
             statusElement.innerText = `Дуся: Рахую до міста ${targetCity}...`;
-            let distanceRes = await askDusyaAI(`Ми зараз в локації ${currentPlaceName} (координати: ${currentLat}, ${currentLon}). Обчесли приблизну відстань до міста ${targetCity} по трасах. Дай дуже коротку відповідь в один рядок.`);
+            let distanceRes = await askDusyaAI(`Ми зараз в ${currentPlaceName}. Обчесли приблизну відстань до міста ${targetCity}. Дай коротку відповідь в один рядок.`);
             speak(distanceRes); return;
         }
 
@@ -443,17 +422,15 @@ if (SpeechRecognition) {
         if (transcript.includes("запам'ятай парковку") || transcript.includes("запам'ятай машину")) {
             if (currentLat && currentLon) {
                 localStorage.setItem('dusya_parking', JSON.stringify({lat: currentLat, lon: currentLon}));
-                if (recognition) recognition.stop(); speak("Координати парковки надійно збережено у сейф.");
+                if (recognition) recognition.stop(); speak("Координати парковки збережено у сейф.");
             } else { if (recognition) recognition.stop(); speak("Немає сигналу GPS."); }
             return;
         }
-        if (transcript.includes("де моя машина") || transcript.includes("де я припаркувався") || transcript.includes("знайди машину")) {
-            let parkingData = localStorage.getItem('dusya_parking');
-            if (recognition) recognition.stop();
+        if (transcript.includes("де моя машина") || transcript.includes("знайди машину")) {
+            let parkingData = localStorage.getItem('dusya_parking'); if (recognition) recognition.stop();
             if (parkingData) {
-                let p = JSON.parse(parkingData);
-                window.open(`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}&travelmode=walking`, '_blank');
-                speak("Відкриваю пішохідний маршрут до вашого авто на картах.");
+                let p = JSON.parse(parkingData); window.open(`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}&travelmode=walking`, '_blank');
+                speak("Відкриваю пішохідний маршрут до авто.");
             } else { speak("Я не пам'ятаю, де ви припаркувалися."); }
             return;
         }
@@ -463,69 +440,29 @@ if (SpeechRecognition) {
             document.body.style.backgroundColor = "#000000"; speedElement.style.color = "#8B0000"; speedElement.style.textShadow = "none";
             if (recognition) recognition.stop(); speak("Нічний екран увімкнено."); return;
         }
-        if (transcript.includes("денний режим")) {
-            resetVisuals(); if (recognition) recognition.stop(); speak("Денний екран увімкнено."); return;
-        }
+        if (transcript.includes("денний режим")) { resetVisuals(); if (recognition) recognition.stop(); speak("Денний екран увімкнено."); return; }
         if (transcript.includes("машина часу") || transcript.includes("назад у майбутнє")) {
-            isTimeMachineActive = true; said88mph = false;
-            document.body.style.backgroundColor = "#000000";
-            speedElement.style.fontFamily = "'Courier New', Courier, monospace";
-            speedElement.style.color = "#00FF00";
-            speedElement.style.textShadow = "0 0 20px #00FF00";
+            isTimeMachineActive = true; said88mph = false; document.body.style.backgroundColor = "#000000";
+            speedElement.style.fontFamily = "'Courier New', Courier, monospace"; speedElement.style.color = "#00FF00"; speedElement.style.textShadow = "0 0 20px #00FF00";
             if (recognition) recognition.stop(); speak("Конденсатор потоку увімкнено! Готові до стрибка в часі."); return;
         }
 
-        if (transcript.includes("яка швидкість") || transcript.includes("швидкість зараз")) {
-            if (recognition) recognition.stop(); speak(`Зараз наша швидкість ${gpsSpeed} кілометрів на годину.`); return;
-        }
-
+        // --- РЕЖИМИ ТА ПОГОДА ---
         if (transcript.includes("увімкни авто-гіда") || transcript.includes("увімкни автогіда")) {
-            isAutoGuideActive = true; lastPlaceName = currentPlaceName;
-            if (recognition) recognition.stop(); speak("Автоматичний аудіо-гід увімкнено."); return;
+            isAutoGuideActive = true; lastPlaceName = currentPlaceName; if (recognition) recognition.stop(); speak("Авто-гід увімкнено."); return;
         }
         if (transcript.includes("вимкни авто-гіда") || transcript.includes("вимкни автогіда")) {
-            isAutoGuideActive = false; if (recognition) recognition.stop(); speak("Автоматичний аудіо-гід вимкнено."); return;
+            isAutoGuideActive = false; if (recognition) recognition.stop(); speak("Авто-гід вимкнено."); return;
         }
 
         if (transcript.includes("режим балабола") || transcript.includes("режим балабол") || transcript.includes("будь балаболом")) {
-            currentMode = "CHATTERBOX";
-            if (recognition) recognition.stop();
+            currentMode = "CHATTERBOX"; if (recognition) recognition.stop();
             speak("О, це мій улюблений режим! Вмикаю Балабола. Ну що, розкажи, як настрій сьогодні в дорозі?");
-            isWaitingForCommand = true; clearTimeout(waitingTimer);
-            waitingTimer = setTimeout(() => { isWaitingForCommand = false; }, 10000); return;
+            isWaitingForCommand = true; clearTimeout(waitingTimer); waitingTimer = setTimeout(() => { isWaitingForCommand = false; }, 10000); return;
         }
 
-        if (transcript.includes("я хочу спати") || transcript.includes("я сонний") || transcript.includes("засинаю")) {
-            currentMode = "ANTI_SLEEP"; antiSleepCounter = 0;
-            if (antiSleepTimer) clearInterval(antiSleepTimer);
-            if (recognition) recognition.stop();
-            speak("Увага! Вмикаю режим анти-сон. Буду діставати тебе запитаннями кожні дві хвилини!");
-            
-            antiSleepTimer = setInterval(async () => {
-                if (!isListening || currentMode !== "ANTI_SLEEP") { clearInterval(antiSleepTimer); return; }
-                antiSleepCounter += 2;
-                let sleepPrompt = "Згенеруй одну бадьору репліку для засинаючого водія, запитай його про щось або запропонуй рок. ";
-                if (antiSleepCounter % 10 === 0) sleepPrompt += "Нагадай йому з'їхати на заправку випити кави. ";
-                
-                statusElement.innerText = "Дуся: Штрикаю водія...";
-                let sleepResponse = await askDusyaAI(sleepPrompt);
-                speak(sleepResponse);
-                
-                setTimeout(() => {
-                    if (currentMode === "ANTI_SLEEP" && isListening) {
-                        isWaitingForCommand = true; clearTimeout(waitingTimer);
-                        waitingTimer = setTimeout(() => { isWaitingForCommand = false; }, 10000);
-                    }
-                }, 4000);
-            }, 120000); return;
-        }
-
-        if (transcript.includes("погода")) {
-            let city = null; let match = transcript.match(/погода\s+(?:в|у)\s+([а-яєіїґ-]+)/i);
-            if (match) city = match[1]; handleWeatherCommand(city); return;
-        }
-
-        if (transcript.includes("давай поговоримо") || transcript.includes("поспілкуємось")) { currentMode = "TALKATIVE"; if (recognition) recognition.stop(); speak("Вмикаю режим Ерудита. Про що хочеш поговорити?"); return; }
+        if (transcript.includes("погода")) { let city = null; let match = transcript.match(/погода\s+(?:в|у)\s+([а-яєіїґ-]+)/i); if (match) city = match[1]; handleWeatherCommand(city); return; }
+        if (transcript.includes("давай поговоримо") || transcript.includes("поспілкуємось")) { currentMode = "TALKATIVE"; if (recognition) recognition.stop(); speak("Вмикаю режим Ерудита. Про що поговоримо?"); return; }
 
         let isAddressed = transcript.includes("дуся") || isWaitingForCommand;
 
@@ -546,28 +483,11 @@ if (SpeechRecognition) {
                 
                 const aiResponse = await askDusyaAI(cleanQuery);
                 dusyaBtn.style.backgroundColor = "#00FF00"; 
+                statusElement.innerText = "Дуся: Говорю..."; speak(aiResponse);
 
-                if (aiResponse.includes("[RADIO:")) {
-                    const match = aiResponse.match(/\[RADIO:\s*(.*?)\s*\]/);
-                    let cleanText = aiResponse.replace(/\[RADIO:.*?\]/, "").trim();
-                    if (match && match[1]) {
-                        let success = playLiveRadio(match[1]);
-                        if (!success) { cleanText = "Відкриваю на Ютубі."; openYouTubeApp(`${match[1]} прямий ефір радіо`); }
-                    }
-                    statusElement.innerText = "Дуся: Прямий ефір..."; speak(cleanText);
-                }
-                else if (aiResponse.includes("[WATCH:")) {
-                    const match = aiResponse.match(/\[WATCH:\s*(.*?)\s*\]/);
-                    let cleanText = aiResponse.replace(/\[WATCH:.*?\]/, "").trim();
-                    if (match && match[1]) { lastMusicQuery = match[1]; openYouTubeApp(match[1]); }
-                    statusElement.innerText = "Дуся: Відкриваю YouTube..."; speak(cleanText);
-                } 
-                else {
-                    statusElement.innerText = "Дуся: Говорю..."; speak(aiResponse);
-                    if (currentMode === "CHATTERBOX" || currentMode === "ANTI_SLEEP") {
-                        isWaitingForCommand = true; clearTimeout(waitingTimer);
-                        waitingTimer = setTimeout(() => { isWaitingForCommand = false; }, 10000);
-                    }
+                if (currentMode === "CHATTERBOX") {
+                    isWaitingForCommand = true; clearTimeout(waitingTimer);
+                    waitingTimer = setTimeout(() => { isWaitingForCommand = false; }, 10000);
                 }
             } else {
                 statusElement.innerText = "Дуся: Слухаю...";
@@ -580,11 +500,11 @@ if (SpeechRecognition) {
         }
     };
 
-    recognition.onend = () => { if (isListening && !window.speechSynthesis.speaking) { try { recognition.start(); } catch(e) {} } };
+    recognition.onend = () => { if (isListening && !window.speechSynthesis.speaking && !isRecordingNote) { try { recognition.start(); } catch(e) {} } };
 }
 
 // ==========================================
-// 8. КНОПКА ТА GPS ТРЕКІНГ
+// 7. КНОПКА ТА GPS ТРЕКІНГ
 // ==========================================
 dusyaBtn.addEventListener('click', async () => {
     if (!isListening) {
@@ -599,12 +519,11 @@ dusyaBtn.addEventListener('click', async () => {
     } else {
         isListening = false; dusyaBtn.classList.remove('active'); dusyaBtn.innerText = "Запустити Дусю";
         statusElement.innerText = "Вимкнена"; window.speechSynthesis.cancel();
-        if (antiSleepTimer) { clearInterval(antiSleepTimer); antiSleepTimer = null; }
         if (noteTimerInterval) { clearInterval(noteTimerInterval); noteTimerInterval = null; }
         if (recognition) recognition.stop(); keepAliveAudio.pause();
-        liveRadioPlayer.pause(); liveRadioPlayer.src = "";
         currentMode = "DEFAULT"; chatHistory = []; isWaitingForCommand = false; isAutoGuideActive = false;
         isTimeMachineActive = false; isRecordingNote = false; resetVisuals();
+        document.getElementById('note-overlay').style.display = 'none';
         if (locationTimer) { clearInterval(locationTimer); locationTimer = null; }
         if (wakeLock !== null) { wakeLock.release(); wakeLock = null; }
     }
@@ -625,16 +544,15 @@ if (navigator.geolocation) {
                 gpsSpeed = speedKmh; 
             }
 
-            // МІСЬКИЙ ЗАТОР (Traffic Jam Zen)
             if (gpsSpeed <= 7) {
                 if (jamStartTime === 0) jamStartTime = Date.now();
                 else if (Date.now() - jamStartTime > 180000 && !isJamZenActive) { 
                     isJamZenActive = true; currentMode = "CHATTERBOX";
-                    speak("Схоже, ми застрягли у заторі. Щоб не нудьгувати, я вмикаю режим балабола. Розкажи, як настрій?");
+                    speak("Схоже, ми застрягли у заторі. Щоб не нудьгувати, я вмикаю режим балабола.");
                 }
             } else { jamStartTime = 0; isJamZenActive = false; }
 
-            if (speedKmh >= 100 && !said100) { speak("Попереду можуть быть камери, скинь швидкість!"); said100 = true; } 
+            if (speedKmh >= 100 && !said100) { speak("Попереду можуть бути камери, скинь швидкість!"); said100 = true; } 
             else if (speedKmh >= 70 && speedKmh < 100 && !said70) { speak("Тримай швидкість під контролем."); said70 = true; } 
             if (speedKmh < 50) { said70 = false; said100 = false; }
         },
