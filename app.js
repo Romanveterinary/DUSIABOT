@@ -23,7 +23,7 @@ window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices(
 // ==========================================
 // 1. НАЛАШТУВАННЯ ТА ЗМІННІ СТАНУ 
 // ==========================================
-console.log("Запуск Дусі v5.4: Пасхалка для Улі, Дефібрилятор, Очищення раз на місяць!");
+console.log("Запуск Дусі v5.5: Оптимізація, Дієта та Миттєва Жовта Кнопка!");
 
 const speedElement = document.getElementById('speed-display');
 const statusElement = document.getElementById('status-text');
@@ -53,7 +53,7 @@ let lastPlaceName = "";
 let isRecordingNote = false;   
 let currentNoteText = "";      
 let noteTimerInterval = null;  
-let isWaitingForCleanupConfirm = false; // Тригер питання про очищення
+let isWaitingForCleanupConfirm = false;
 let isTimeMachineActive = false;
 let said88mph = false;
 let jamStartTime = 0;          
@@ -88,6 +88,7 @@ noteOverlay.id = 'note-overlay';
 noteOverlay.innerHTML = `<div class="blink-dot"></div> <span id="note-time">00:00</span>`;
 document.body.appendChild(noteOverlay);
 
+// Моніторинг інтернету кожні 30 секунд (ОПТИМІЗОВАНО)
 setInterval(async () => {
     if (!navigator.onLine) { netIndicator.style.background = 'red'; return; }
     let start = Date.now();
@@ -96,7 +97,7 @@ setInterval(async () => {
         let duration = Date.now() - start;
         netIndicator.style.background = duration < 800 ? '#00FF00' : 'yellow'; 
     } catch(e) { netIndicator.style.background = 'red'; }
-}, 10000);
+}, 30000); 
 
 window.addEventListener('DOMContentLoaded', () => {
     try { const savedKey = localStorage.getItem('gemini_api_key'); if (savedKey) apiKeyInput.value = savedKey; } catch (e) { }
@@ -118,7 +119,7 @@ document.addEventListener('visibilitychange', async () => {
             window.speechSynthesis.cancel();
             if (recognition) {
                 try { recognition.abort(); } catch(e){}
-                setTimeout(() => { try { recognition.start(); statusElement.innerText = "Дуся: Знову слухаю..."; } catch(e){} }, 500);
+                setTimeout(() => { try { recognition.start(); statusElement.innerText = "Дуся: Знову слухаю..."; dusyaBtn.style.backgroundColor = "#00FF00"; } catch(e){} }, 500);
             }
         }
     }
@@ -195,10 +196,14 @@ function speak(text, onEndCallback = null) {
             if (onEndCallback) {
                 onEndCallback();
             } else if (isListening && !window.speechSynthesis.speaking && !isRecordingNote && !isWaitingForCleanupConfirm) {
-                try { recognition.start(); statusElement.innerText = "Дуся: Слухаю..."; } catch(e) { }
+                try { 
+                    recognition.start(); 
+                    statusElement.innerText = "Дуся: Слухаю..."; 
+                    dusyaBtn.style.backgroundColor = "#00FF00"; // Зелений після відповіді
+                } catch(e) { }
             }
         };
-        utterance.onerror = () => { if (isListening && !isRecordingNote) { try { recognition.start(); } catch(e) { } } };
+        utterance.onerror = () => { if (isListening && !isRecordingNote) { try { recognition.start(); dusyaBtn.style.backgroundColor = "#00FF00"; } catch(e) { } } };
         window.speechSynthesis.speak(utterance);
     }
 }
@@ -333,6 +338,12 @@ if (SpeechRecognition) {
         const transcript = event.results[last][0].transcript.toLowerCase().trim();
         console.log("Дуся почула: ", transcript);
 
+        // --- МИТТЄВА ЖОВТА КНОПКА (ОПТИМІЗАЦІЯ) ---
+        if (transcript.includes("дуся") || isWaitingForCommand) { 
+            dusyaBtn.style.backgroundColor = "#FFA500"; 
+            playPing(); 
+        }
+
         // --- 0. ДІАЛОГ ОЧИЩЕННЯ ПАМ'ЯТІ ---
         if (isWaitingForCleanupConfirm) {
             if (transcript.includes("так") || transcript.includes("очистити") || transcript.includes("видалити")) {
@@ -344,9 +355,7 @@ if (SpeechRecognition) {
                 localStorage.setItem('dusya_last_cleanup', Date.now());
                 isWaitingForCleanupConfirm = false;
                 speak("Зрозуміла, залишаю всі записи. Режим штурмана увімкнено.");
-            } else {
-                speak("Скажіть Так або Ні.");
-            }
+            } else { speak("Скажіть Так або Ні."); }
             return;
         }
 
@@ -357,6 +366,7 @@ if (SpeechRecognition) {
             currentMode = "DEFAULT"; chatHistory = []; 
             isWaitingForCommand = false; isRecordingNote = false; isTimeMachineActive = false;
             resetVisuals(); document.getElementById('note-overlay').style.display = 'none';
+            dusyaBtn.style.backgroundColor = "#00FF00"; // Скидання кольору кнопки
             playPing(); statusElement.innerText = "Дуся: Режим Штурмана";
             if (recognition) { try { recognition.stop(); } catch(e){} }
             speak("Зрозуміла. Мовчу, режим штурмана повернуто.");
@@ -380,17 +390,14 @@ if (SpeechRecognition) {
             return; 
         }
 
-        if (transcript.includes("дуся") || isWaitingForCommand) { playPing(); }
         if (window.speechSynthesis.speaking) return; 
 
         // --- 3. МИТТЄВІ ЛОКАЛЬНІ КОМАНДИ (БЕЗ ІНТЕРНЕТУ) ---
         if (transcript.includes("котра година") || transcript.includes("який зараз час") || transcript.includes("який час")) {
-            if (recognition) recognition.stop(); let localT = new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
-            speak(`Зараз ${localT}.`); return;
+            if (recognition) recognition.stop(); let localT = new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }); speak(`Зараз ${localT}.`); return;
         }
         if (transcript.includes("яке сьогодні число") || transcript.includes("який сьогодні день") || transcript.includes("яка дата")) {
-            if (recognition) recognition.stop(); let localD = new Date().toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' });
-            speak(`Сьогодні ${localD}.`); return;
+            if (recognition) recognition.stop(); let localD = new Date().toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' }); speak(`Сьогодні ${localD}.`); return;
         }
         if (transcript.includes("де ми") || transcript.includes("яке це місто") || transcript.includes("де я знаходжусь")) {
             if (recognition) recognition.stop(); speak(`Ми зараз в районі ${currentPlaceName}.`); return;
@@ -399,9 +406,7 @@ if (SpeechRecognition) {
             if (recognition) recognition.stop(); speak(`Зараз наша швидкість ${gpsSpeed} кілометрів на годину.`); return;
         }
         if (transcript.includes("що ти вмієш") || transcript.includes("розкажи свої команди") || transcript.includes("розкажи команди")) {
-            if (recognition) recognition.stop();
-            speak("Я вмію записувати замітки, шукати в Ютубі, рахувати відстань до міст, міняти кольори, пам'ятати парковку та вмикати автогіда.");
-            return;
+            if (recognition) recognition.stop(); speak("Я вмію записувати замітки, шукати в Ютубі, рахувати відстань до міст, міняти кольори, пам'ятати парковку та вмикати автогіда."); return;
         }
 
         // --- 3.5 ПАСХАЛКА ДЛЯ УЛІ (VIP-ПАСАЖИР) ---
@@ -420,10 +425,7 @@ if (SpeechRecognition) {
         // --- 4. ПРЯМИЙ YOUTUBE (ЗАМІСТЬ РАДІО) ---
         let ytMatch = transcript.match(/(?:включи|відкрий|знайди)\s+(?:пісню|музику|в ютубі|на ютубі|ютуб)?\s*(.*)/i);
         if (ytMatch && ytMatch[1] && ytMatch[1].trim() !== "") {
-            let ytQuery = ytMatch[1].trim();
-            if (recognition) recognition.stop();
-            speak(`Відкриваю ${ytQuery} на Ютубі.`);
-            openYouTubeApp(ytQuery); return;
+            let ytQuery = ytMatch[1].trim(); if (recognition) recognition.stop(); speak(`Відкриваю ${ytQuery} на Ютубі.`); openYouTubeApp(ytQuery); return;
         }
 
         // --- 5. ЗМІНА КОЛЬОРУ СПІДОМЕТРА ---
@@ -518,7 +520,6 @@ if (SpeechRecognition) {
         let isAddressed = transcript.includes("дуся") || isWaitingForCommand;
 
         if (isAddressed) {
-            dusyaBtn.style.backgroundColor = "#FFA500"; 
             clearTimeout(waitingTimer);
             isWaitingForCommand = false;
 
@@ -533,7 +534,7 @@ if (SpeechRecognition) {
                 if (recognition) recognition.stop(); 
                 
                 const aiResponse = await askDusyaAI(cleanQuery);
-                dusyaBtn.style.backgroundColor = "#00FF00"; 
+                dusyaBtn.style.backgroundColor = "#00FF00"; // Зелений, коли говорить
                 statusElement.innerText = "Дуся: Говорю..."; speak(aiResponse);
 
                 if (currentMode === "CHATTERBOX") {
@@ -560,6 +561,7 @@ if (SpeechRecognition) {
 dusyaBtn.addEventListener('click', async () => {
     if (!isListening) {
         isListening = true; dusyaBtn.classList.add('active'); dusyaBtn.innerText = "Дуся Активна";
+        dusyaBtn.style.backgroundColor = "#00FF00"; // Встановлюємо зелений при старті
         statusElement.innerText = "Дуся: Слухаю..."; keepAliveAudio.play().catch(e => {});
         try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
         
@@ -580,6 +582,7 @@ dusyaBtn.addEventListener('click', async () => {
 
     } else {
         isListening = false; dusyaBtn.classList.remove('active'); dusyaBtn.innerText = "Запустити Дусю";
+        dusyaBtn.style.backgroundColor = ""; // Скидаємо колір при вимкненні
         statusElement.innerText = "Вимкнена"; window.speechSynthesis.cancel();
         if (noteTimerInterval) { clearInterval(noteTimerInterval); noteTimerInterval = null; }
         if (recognition) recognition.stop(); keepAliveAudio.pause();
