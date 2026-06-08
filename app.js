@@ -11,10 +11,9 @@
             throw new Error("Зупинка скрипта: невірний пароль.");
         }
     }
-    // Заділ під майбутній Service Worker для запуску взагалі без інтернету
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/sw.js').catch(() => { /* sw.js поки немає, але код готовий */ });
+            navigator.serviceWorker.register('/sw.js').catch(() => { /* sw.js поки немає */ });
         });
     }
 })();
@@ -24,7 +23,7 @@ window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices(
 // ==========================================
 // 1. НАЛАШТУВАННЯ ТА ЗМІННІ СТАНУ 
 // ==========================================
-console.log("Запуск Дусі v5.3: Тотальний Ютуб, Світлофор Інтернету та Візуальні Замітки!");
+console.log("Запуск Дусі v5.4: Пасхалка для Улі, Дефібрилятор, Очищення раз на місяць!");
 
 const speedElement = document.getElementById('speed-display');
 const statusElement = document.getElementById('status-text');
@@ -50,10 +49,11 @@ let waitingTimer = null;
 let isAutoGuideActive = false; 
 let lastPlaceName = "";        
 
-// ЗМІННІ ДЛЯ ЗАМІТОК ТА СПЕЦРЕЖИМІВ
+// ЗМІННІ ДЛЯ ЗАМІТОК, ОЧИЩЕННЯ ТА СПЕЦРЕЖИМІВ
 let isRecordingNote = false;   
 let currentNoteText = "";      
 let noteTimerInterval = null;  
+let isWaitingForCleanupConfirm = false; // Тригер питання про очищення
 let isTimeMachineActive = false;
 let said88mph = false;
 let jamStartTime = 0;          
@@ -88,7 +88,6 @@ noteOverlay.id = 'note-overlay';
 noteOverlay.innerHTML = `<div class="blink-dot"></div> <span id="note-time">00:00</span>`;
 document.body.appendChild(noteOverlay);
 
-// Моніторинг інтернету кожні 10 секунд
 setInterval(async () => {
     if (!navigator.onLine) { netIndicator.style.background = 'red'; return; }
     let start = Date.now();
@@ -111,8 +110,18 @@ saveSettingsBtn.addEventListener('click', () => {
     if (key) { localStorage.setItem('gemini_api_key', key); saveSettingsBtn.innerText = "✅ Збережено!"; setTimeout(() => { settingsModal.classList.add('hidden'); saveSettingsBtn.innerText = "Зберегти"; }, 1000); }
 });
 
+// ДЕФІБРИЛЯТОР: Перезапуск мікрофона після Ютуба
 document.addEventListener('visibilitychange', async () => {
-    if (wakeLock !== null && document.visibilityState === 'visible') { try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e) {} }
+    if (document.visibilityState === 'visible') {
+        if (wakeLock !== null) { try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e) {} }
+        if (isListening) {
+            window.speechSynthesis.cancel();
+            if (recognition) {
+                try { recognition.abort(); } catch(e){}
+                setTimeout(() => { try { recognition.start(); statusElement.innerText = "Дуся: Знову слухаю..."; } catch(e){} }, 500);
+            }
+        }
+    }
 });
 
 function resetVisuals() {
@@ -130,22 +139,17 @@ function playPing() {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
         const osc = ctx.createOscillator(); const gain = ctx.createGain();
         osc.type = 'sine'; osc.frequency.setValueAtTime(1200, ctx.currentTime);
-        gain.gain.setValueAtTime(0.08, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.start(); osc.stop(ctx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.08, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+        osc.connect(gain); gain.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.15);
     } catch(e){}
 }
 
 function playChime() { 
     try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const gain = ctx.createGain(); gain.gain.setValueAtTime(0.06, ctx.currentTime);
-        gain.connect(ctx.destination);
-        const osc1 = ctx.createOscillator(); osc1.frequency.setValueAtTime(520, ctx.currentTime);
-        osc1.connect(gain); osc1.start(); osc1.stop(ctx.currentTime + 0.08);
-        const osc2 = ctx.createOscillator(); osc2.frequency.setValueAtTime(420, ctx.currentTime + 0.08);
-        osc2.connect(gain); osc2.start(ctx.currentTime + 0.08); osc2.stop(ctx.currentTime + 0.22);
+        const gain = ctx.createGain(); gain.gain.setValueAtTime(0.06, ctx.currentTime); gain.connect(ctx.destination);
+        const osc1 = ctx.createOscillator(); osc1.frequency.setValueAtTime(520, ctx.currentTime); osc1.connect(gain); osc1.start(); osc1.stop(ctx.currentTime + 0.08);
+        const osc2 = ctx.createOscillator(); osc2.frequency.setValueAtTime(420, ctx.currentTime + 0.08); osc2.connect(gain); osc2.start(ctx.currentTime + 0.08); osc2.stop(ctx.currentTime + 0.22);
     } catch(e){}
 }
 
@@ -153,16 +157,26 @@ function playSciFiAcceleration() {
     try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
         const osc = ctx.createOscillator(); const gain = ctx.createGain();
-        osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 1.2);
-        gain.gain.setValueAtTime(0.05, ctx.currentTime);
-        gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 1.2);
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.start(); osc.stop(ctx.currentTime + 1.2);
+        osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, ctx.currentTime); osc.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 1.2);
+        gain.gain.setValueAtTime(0.05, ctx.currentTime); gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 1.2);
+        osc.connect(gain); gain.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 1.2);
     } catch(e) {}
 }
 
-function speak(text) {
+function playMagicSound() {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const gain = ctx.createGain(); gain.connect(ctx.destination);
+        gain.gain.setValueAtTime(0.05, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 2.0);
+        [800, 1000, 1200, 1500, 2000].forEach((freq, i) => {
+            let osc = ctx.createOscillator(); osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, ctx.currentTime + i*0.15);
+            osc.connect(gain); osc.start(ctx.currentTime + i*0.15); osc.stop(ctx.currentTime + i*0.15 + 0.5);
+        });
+    } catch(e){}
+}
+
+function speak(text, onEndCallback = null) {
     if ('speechSynthesis' in window) {
         if (recognition) { try { recognition.stop(); } catch(e){} }
         window.speechSynthesis.cancel(); 
@@ -178,7 +192,9 @@ function speak(text) {
 
         utterance.onend = () => {
             playChime(); 
-            if (isListening && !window.speechSynthesis.speaking && !isRecordingNote) {
+            if (onEndCallback) {
+                onEndCallback();
+            } else if (isListening && !window.speechSynthesis.speaking && !isRecordingNote && !isWaitingForCleanupConfirm) {
                 try { recognition.start(); statusElement.innerText = "Дуся: Слухаю..."; } catch(e) { }
             }
         };
@@ -317,6 +333,23 @@ if (SpeechRecognition) {
         const transcript = event.results[last][0].transcript.toLowerCase().trim();
         console.log("Дуся почула: ", transcript);
 
+        // --- 0. ДІАЛОГ ОЧИЩЕННЯ ПАМ'ЯТІ ---
+        if (isWaitingForCleanupConfirm) {
+            if (transcript.includes("так") || transcript.includes("очистити") || transcript.includes("видалити")) {
+                localStorage.removeItem('dusya_notes'); localStorage.removeItem('dusya_parking');
+                localStorage.setItem('dusya_last_cleanup', Date.now());
+                isWaitingForCleanupConfirm = false;
+                speak("Сейф повністю очищено. Режим штурмана увімкнено.");
+            } else if (transcript.includes("ні") || transcript.includes("залишити") || transcript.includes("не треба")) {
+                localStorage.setItem('dusya_last_cleanup', Date.now());
+                isWaitingForCleanupConfirm = false;
+                speak("Зрозуміла, залишаю всі записи. Режим штурмана увімкнено.");
+            } else {
+                speak("Скажіть Так або Ні.");
+            }
+            return;
+        }
+
         // --- 1. АВАРІЙНИЙ СТОП-КРАН ---
         if (transcript.includes("стоп") || transcript.includes("завершити") || transcript.includes("хватить") || transcript.includes("закрийся") || transcript.includes("все нормально")) {
             if (noteTimerInterval) { clearInterval(noteTimerInterval); noteTimerInterval = null; }
@@ -364,6 +397,24 @@ if (SpeechRecognition) {
         }
         if (transcript.includes("яка швидкість") || transcript.includes("швидкість зараз")) {
             if (recognition) recognition.stop(); speak(`Зараз наша швидкість ${gpsSpeed} кілометрів на годину.`); return;
+        }
+        if (transcript.includes("що ти вмієш") || transcript.includes("розкажи свої команди") || transcript.includes("розкажи команди")) {
+            if (recognition) recognition.stop();
+            speak("Я вмію записувати замітки, шукати в Ютубі, рахувати відстань до міст, міняти кольори, пам'ятати парковку та вмикати автогіда.");
+            return;
+        }
+
+        // --- 3.5 ПАСХАЛКА ДЛЯ УЛІ (VIP-ПАСАЖИР) ---
+        if (transcript.includes("привітай улю") || transcript.includes("привітай уля") || transcript.includes("привіт уля")) {
+            if (recognition) recognition.stop();
+            document.body.style.backgroundColor = "#4B0082";
+            speedElement.style.color = "#FF1493";
+            speedElement.style.textShadow = "0 0 30px #FF1493";
+            playMagicSound();
+            speak("Ого, який важливий пасажир на борту! Привіт, Уля! Пристебни пасок, зараз буде магія! Ти слухалась тата і маму? Тоді ось тобі весела пісенька.", () => {
+                openYouTubeApp("трендові пісні для підлітків 2024");
+            });
+            return;
         }
 
         // --- 4. ПРЯМИЙ YOUTUBE (ЗАМІСТЬ РАДІО) ---
@@ -500,7 +551,7 @@ if (SpeechRecognition) {
         }
     };
 
-    recognition.onend = () => { if (isListening && !window.speechSynthesis.speaking && !isRecordingNote) { try { recognition.start(); } catch(e) {} } };
+    recognition.onend = () => { if (isListening && !window.speechSynthesis.speaking && !isRecordingNote && !isWaitingForCleanupConfirm) { try { recognition.start(); } catch(e) {} } };
 }
 
 // ==========================================
@@ -516,13 +567,24 @@ dusyaBtn.addEventListener('click', async () => {
         if (locationTimer) clearInterval(locationTimer);
         locationTimer = setInterval(checkLocationAndZone, 60000); 
         setTimeout(checkLocationAndZone, 1500);
+
+        // ПЕРЕВІРКА ОЧИЩЕННЯ РАЗ НА МІСЯЦЬ
+        let lastCleanup = localStorage.getItem('dusya_last_cleanup');
+        let nowTime = Date.now();
+        if (!lastCleanup) { localStorage.setItem('dusya_last_cleanup', nowTime); } 
+        else if (nowTime - parseInt(lastCleanup) > 30 * 24 * 60 * 60 * 1000) {
+            isWaitingForCleanupConfirm = true;
+            if (recognition) recognition.stop();
+            setTimeout(() => { speak("Минув місяць. Бажаєте очистити сейф заміток та парковку? Скажіть Так або Ні."); }, 1000);
+        }
+
     } else {
         isListening = false; dusyaBtn.classList.remove('active'); dusyaBtn.innerText = "Запустити Дусю";
         statusElement.innerText = "Вимкнена"; window.speechSynthesis.cancel();
         if (noteTimerInterval) { clearInterval(noteTimerInterval); noteTimerInterval = null; }
         if (recognition) recognition.stop(); keepAliveAudio.pause();
         currentMode = "DEFAULT"; chatHistory = []; isWaitingForCommand = false; isAutoGuideActive = false;
-        isTimeMachineActive = false; isRecordingNote = false; resetVisuals();
+        isTimeMachineActive = false; isRecordingNote = false; isWaitingForCleanupConfirm = false; resetVisuals();
         document.getElementById('note-overlay').style.display = 'none';
         if (locationTimer) { clearInterval(locationTimer); locationTimer = null; }
         if (wakeLock !== null) { wakeLock.release(); wakeLock = null; }
@@ -537,8 +599,8 @@ if (navigator.geolocation) {
             
             if (speedKmh >= 0) { 
                 if (isTimeMachineActive && speedKmh > gpsSpeed + 3) { playSciFiAcceleration(); }
-                if (isTimeMachineActive && speedKmh >= 141 && !said88mph) {
-                    said88mph = true; playPing(); speak("88 миль на годину! Стрибок у часі!");
+                if (isTimeMachineActive && speedKmh >= 90 && !said88mph) {
+                    said88mph = true; playPing(); speak("90 кілометрів на годину! Стрибок у часі!");
                 }
                 speedElement.innerText = speedKmh; 
                 gpsSpeed = speedKmh; 
