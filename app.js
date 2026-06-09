@@ -23,7 +23,7 @@ window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices(
 // ==========================================
 // 1. НАЛАШТУВАННЯ ТА ЗМІННІ СТАНУ 
 // ==========================================
-console.log("Запуск Дусі v5.7: Тотальна Стабільність та Офлайн-Запобіжники!");
+console.log("Запуск Дусі v5.8: Інтеграція прозорого скла та радара!");
 
 const speedElement = document.getElementById('speed-display');
 const statusElement = document.getElementById('status-text');
@@ -35,6 +35,18 @@ const settingsModal = document.getElementById('settings-modal');
 const apiKeyInput = document.getElementById('api-key-input');
 const saveSettingsBtn = document.getElementById('save-settings-btn');
 const closeSettingsBtn = document.getElementById('close-settings-btn');
+
+// --- ЗМІННІ ДЛЯ ШІ РАДАРА ---
+const aiRadarToggle = document.getElementById('ai-radar-toggle');
+const aiSensSlider = document.getElementById('ai-sens-slider');
+const aiFocalSlider = document.getElementById('ai-focal-slider');
+const aiSensVal = document.getElementById('ai-sens-val');
+const aiFocalVal = document.getElementById('ai-focal-val');
+
+let isRadarActive = false;
+let aiStream = null;
+let aiSens = 60;
+let aiFocal = 1.0;
 
 let currentMode = "DEFAULT"; 
 let chatHistory = [];        
@@ -73,7 +85,7 @@ let activeLoopOscillators = [];
 let activeIntervals = [];
 
 // ==========================================
-// 2. ДИНАМІЧНИЙ ІНТЕРФЕЙС
+// 2. ДИНАМІЧНИЙ ІНТЕРФЕЙС ТА НАЛАШТУВАННЯ
 // ==========================================
 const styleInject = document.createElement('style');
 styleInject.innerHTML = `
@@ -104,19 +116,127 @@ setInterval(async () => {
 }, 30000); 
 
 window.addEventListener('DOMContentLoaded', () => {
-    try { const savedKey = localStorage.getItem('gemini_api_key'); if (savedKey) apiKeyInput.value = savedKey; } catch (e) { }
+    try { 
+        const savedKey = localStorage.getItem('gemini_api_key'); 
+        if (savedKey) apiKeyInput.value = savedKey; 
+        
+        // Завантаження налаштувань радара
+        const savedSens = localStorage.getItem('dusya_ai_sens');
+        if (savedSens && aiSensSlider) { aiSensSlider.value = savedSens; aiSensVal.innerText = savedSens + "%"; aiSens = parseInt(savedSens); }
+        
+        const savedFocal = localStorage.getItem('dusya_ai_focal');
+        if (savedFocal && aiFocalSlider) { aiFocalSlider.value = savedFocal; aiFocalVal.innerText = savedFocal; aiFocal = parseFloat(savedFocal); }
+        
+        const savedHood = localStorage.getItem('dusya_hood_y');
+        if (savedHood && document.getElementById('hood-line')) {
+            document.getElementById('hood-line').style.top = savedHood + "%";
+        }
+    } catch (e) { }
+    
     if (speedElement) { speedElement.style.fontSize = "25vh"; speedElement.style.lineHeight = "1.2"; speedElement.style.fontWeight = "900"; }
 });
 
+// Живе оновлення тексту повзунків
+if (aiSensSlider) aiSensSlider.oninput = (e) => aiSensVal.innerText = e.target.value + "%";
+if (aiFocalSlider) aiFocalSlider.oninput = (e) => aiFocalVal.innerText = e.target.value;
+
 settingsBtn.addEventListener('click', () => settingsModal.classList.remove('hidden'));
 closeSettingsBtn.addEventListener('click', () => settingsModal.classList.add('hidden'));
+
 saveSettingsBtn.addEventListener('click', () => {
     const key = apiKeyInput.value.trim();
-    if (key) { localStorage.setItem('gemini_api_key', key); saveSettingsBtn.innerText = "✅ Збережено!"; setTimeout(() => { settingsModal.classList.add('hidden'); saveSettingsBtn.innerText = "Зберегти"; }, 1000); }
+    if (key) { localStorage.setItem('gemini_api_key', key); }
+    
+    // Збереження повзунків
+    if (aiSensSlider) { localStorage.setItem('dusya_ai_sens', aiSensSlider.value); aiSens = parseInt(aiSensSlider.value); }
+    if (aiFocalSlider) { localStorage.setItem('dusya_ai_focal', aiFocalSlider.value); aiFocal = parseFloat(aiFocalSlider.value); }
+
+    // Увімкнення/Вимкнення камери радара
+    if (aiRadarToggle && aiRadarToggle.checked !== isRadarActive) {
+        toggleRadar(aiRadarToggle.checked);
+    }
+
+    saveSettingsBtn.innerText = "✅ Збережено!"; 
+    setTimeout(() => { settingsModal.classList.add('hidden'); saveSettingsBtn.innerText = "Зберегти"; }, 1000);
 });
 
+// Функція запуску/зупинки прозорого скла (Камери)
+async function toggleRadar(turnOn) {
+    isRadarActive = turnOn;
+    const radarLayer = document.getElementById('ai-radar-layer');
+    const video = document.getElementById('ai-video');
+    
+    if (turnOn) {
+        document.body.classList.add('radar-active');
+        radarLayer.style.display = 'block';
+        try {
+            aiStream = await navigator.mediaDevices.getUserMedia({video: {facingMode: "environment"}});
+            video.srcObject = aiStream;
+            wakeUpHoodLine();
+        } catch(e) {
+            speak("Немає доступу до камери");
+            toggleRadar(false);
+            if(aiRadarToggle) aiRadarToggle.checked = false;
+        }
+    } else {
+        document.body.classList.remove('radar-active');
+        radarLayer.style.display = 'none';
+        if (aiStream) {
+            aiStream.getTracks().forEach(t => t.stop());
+            aiStream = null;
+        }
+        if (video) video.srcObject = null;
+    }
+}
+
+// ==========================================
+// ЛОГІКА "ЛІНІЇ КАПОТА" (ЗНИКНЕННЯ ТА ПЕРЕТЯГУВАННЯ)
+// ==========================================
+const hoodLine = document.getElementById('hood-line');
+let hideLineTimeout = null;
+let isDraggingLine = false;
+
+function wakeUpHoodLine() {
+    if (!hoodLine || !isRadarActive) return;
+    hoodLine.style.opacity = '1';
+    
+    if (hideLineTimeout) clearTimeout(hideLineTimeout);
+    
+    hideLineTimeout = setTimeout(() => {
+        if (!isDraggingLine) {
+            hoodLine.style.opacity = '0';
+        }
+    }, 5000);
+}
+
+document.addEventListener('touchstart', wakeUpHoodLine);
+document.addEventListener('mousedown', wakeUpHoodLine);
+
+if (hoodLine) {
+    hoodLine.addEventListener('touchstart', (e) => {
+        isDraggingLine = true;
+        wakeUpHoodLine();
+    });
+
+    document.addEventListener('touchmove', (e) => {
+        if (!isDraggingLine) return;
+        let touchY = e.touches[0].clientY;
+        if (touchY > 50 && touchY < window.innerHeight - 50) {
+            let perc = (touchY / window.innerHeight) * 100;
+            hoodLine.style.top = perc + '%';
+            localStorage.setItem('dusya_hood_y', perc);
+        }
+        wakeUpHoodLine();
+    });
+
+    document.addEventListener('touchend', () => {
+        isDraggingLine = false;
+        wakeUpHoodLine();
+    });
+}
+
 function resetVisuals() {
-    document.body.style.backgroundColor = "";
+    if(!isRadarActive) document.body.style.backgroundColor = "";
     speedElement.style.color = "white";
     speedElement.style.fontFamily = "";
     speedElement.style.textShadow = "none";
@@ -174,7 +294,6 @@ function playMagicSound() {
     } catch(e){}
 }
 
-// Велосипедний дзвінок (Цикл)
 function playBikeBellLoop() {
     stopAllSounds();
     const ring = () => {
@@ -192,7 +311,6 @@ function playBikeBellLoop() {
     activeIntervals.push(setInterval(ring, 2500));
 }
 
-// НЛО (Космічний гул)
 function playUFOLoop() {
     stopAllSounds();
     try {
@@ -203,10 +321,10 @@ function playUFOLoop() {
         
         const lfo = ctx.createOscillator();
         lfo.type = 'sine';
-        lfo.frequency.setValueAtTime(1.5, ctx.currentTime); // Повільна пульсація
+        lfo.frequency.setValueAtTime(1.5, ctx.currentTime); 
         
         const lfoGain = ctx.createGain();
-        lfoGain.gain.setValueAtTime(30, ctx.currentTime); // Зміна частоти
+        lfoGain.gain.setValueAtTime(30, ctx.currentTime); 
         
         lfo.connect(lfoGain); lfoGain.connect(osc.frequency);
         
@@ -219,6 +337,12 @@ function playUFOLoop() {
 }
 
 function speak(text, onEndCallback = null) {
+    // ЯКЩО РАДАР УВІМКНЕНО - МАКСИМАЛЬНА ТИША (Дуся не розмовляє)
+    if (isRadarActive) {
+        if (onEndCallback) onEndCallback();
+        return; 
+    }
+
     if ('speechSynthesis' in window) {
         if (recognition) { try { recognition.stop(); } catch(e){} }
         window.speechSynthesis.cancel(); 
@@ -258,9 +382,7 @@ function openYouTubeApp(query) {
 // ==========================================
 async function checkLocationAndZone() {
     if (!currentLat || !currentLon) {
-        if (isAutoGuideActive && lastPlaceName !== "") {
-           speak(`Сигнал GPS слабкий, але ми все ще в районі ${lastPlaceName}.`);
-        }
+        if (isAutoGuideActive && lastPlaceName !== "") { speak(`Сигнал GPS слабкий, але ми все ще в районі ${lastPlaceName}.`); }
         return;
     }
     try {
@@ -295,9 +417,7 @@ async function checkLocationAndZone() {
             }
         }
     } catch(e) { 
-        if (isAutoGuideActive && lastPlaceName !== "") {
-           speak(`Не маю доступу до карти, але ми приблизно біля ${lastPlaceName}.`);
-        }
+        if (isAutoGuideActive && lastPlaceName !== "") { speak(`Не маю доступу до карти, але ми приблизно біля ${lastPlaceName}.`); }
     }
 }
 
@@ -335,9 +455,7 @@ async function handleWeatherCommand(city) {
 // 5. МІЗКИ ШІ
 // ==========================================
 async function askDusyaAI(userQuestion) {
-    if (!navigator.onLine) {
-        return "Інтернет відсутній. Працюю як офлайн-спідометр.";
-    }
+    if (!navigator.onLine) { return "Інтернет відсутній. Працюю як офлайн-спідометр."; }
     let apiKey = localStorage.getItem('gemini_api_key');
     if (!apiKey) return "Будь ласка, введіть API ключ у налаштуваннях.";
     
@@ -417,6 +535,7 @@ if (SpeechRecognition) {
         if (transcript.includes("стоп") || transcript.includes("завершити") || transcript.includes("хватить") || transcript.includes("закрийся") || transcript.includes("все нормально") || transcript.includes("тихо") || transcript.includes("вимкни звук")) {
             stopAllSounds();
             isBikeMode = false;
+            if (isRadarActive) { toggleRadar(false); if(aiRadarToggle) aiRadarToggle.checked = false; }
             if (noteTimerInterval) { clearInterval(noteTimerInterval); noteTimerInterval = null; }
             window.speechSynthesis.cancel(); 
             currentMode = "DEFAULT"; chatHistory = []; 
@@ -641,6 +760,7 @@ dusyaBtn.addEventListener('click', async () => {
         isListening = false; dusyaBtn.classList.remove('active'); dusyaBtn.innerText = "Запустити Дусю";
         dusyaBtn.style.backgroundColor = ""; 
         statusElement.innerText = "Вимкнена"; window.speechSynthesis.cancel(); stopAllSounds();
+        if (isRadarActive) { toggleRadar(false); if(aiRadarToggle) aiRadarToggle.checked = false; }
         if (noteTimerInterval) { clearInterval(noteTimerInterval); noteTimerInterval = null; }
         if (recognition) recognition.stop(); keepAliveAudio.pause();
         currentMode = "DEFAULT"; chatHistory = []; isWaitingForCommand = false; isAutoGuideActive = false;
