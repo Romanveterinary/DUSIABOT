@@ -8,25 +8,45 @@
 </head>
 <body>
 
-    <!-- Кнопка налаштувань у кутку -->
+    <div id="ai-radar-layer" style="display: none;">
+        <video id="ai-video" autoplay playsinline muted></video>
+        <canvas id="ai-canvas"></canvas>
+        
+        <div id="hood-line">
+            <div id="hood-line-text">ЛІНІЯ КАПОТА (Тягни)</div>
+        </div>
+    </div>
+
     <button id="settings-btn" title="Налаштування API">⚙️</button>
 
-    <!-- Спідометр -->
     <div id="speed-container">
         <div id="speed-display">0</div>
         <div id="unit">км/год</div>
     </div>
     
-    <!-- Статус та управління -->
     <div id="status-text">Натисніть кнопку для старту</div>
     <button id="dusya-btn">Запустити Дусю</button>
 
-    <!-- Модальне вікно для вводу ключа (приховане за замовчуванням) -->
     <div id="settings-modal" class="hidden">
         <div class="modal-content">
             <h2>Налаштування</h2>
             <p>Введіть ваш ключ Gemini API:</p>
             <input type="password" id="api-key-input" placeholder="Вставте ключ сюди...">
+            
+            <hr style="margin: 15px 0; border-color: #444;">
+            
+            <h3 style="margin-top: 0; color: #0cf;">ШІ-Радар (Безпека)</h3>
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; margin-bottom: 15px; color: #fff;">
+                <input type="checkbox" id="ai-radar-toggle" style="width: 20px; height: 20px; accent-color: #0cf;">
+                <span style="font-weight: bold;">Увімкнути ШІ-відеосканер</span>
+            </label>
+            
+            <label style="display: block; font-size: 0.8rem; color: #aaa; margin-bottom: 5px;">Впевненість ШІ: <span id="ai-sens-val">60%</span></label>
+            <input type="range" id="ai-sens-slider" min="30" max="90" step="5" value="60" style="width: 100%; margin-bottom: 15px;">
+            
+            <label style="display: block; font-size: 0.8rem; color: #aaa; margin-bottom: 5px;">Калібрування фокусу (відстань): <span id="ai-focal-val">1.0</span></label>
+            <input type="range" id="ai-focal-slider" min="0.5" max="3.0" step="0.1" value="1.0" style="width: 100%; margin-bottom: 20px;">
+
             <div class="modal-buttons">
                 <button id="save-settings-btn">Зберегти</button>
                 <button id="close-settings-btn">Закрити</button>
@@ -34,10 +54,8 @@
         </div>
     </div>
 
-    <!-- Прихований контейнер для YouTube плеєра -->
     <div id="youtube-player" style="display: none;"></div>
     
-    <!-- Спеціальний беззвучний трек проти засипання -->
     <audio id="keep-alive-audio" loop src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"></audio>
 
     <script src="app.js"></script>
