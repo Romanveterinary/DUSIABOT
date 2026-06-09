@@ -11,7 +11,92 @@ body {
     align-items: center;
     height: 100vh;
     overflow: hidden;
+    transition: background-color 0.3s;
 }
+
+/* === СТИЛІ ШІ-РАДАРА (ПРОЗОРЕ СКЛО) === */
+#ai-radar-layer {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    z-index: 10; /* Під інтерфейсом, але над фоном */
+    background: #000;
+}
+
+#ai-video, #ai-canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    object-fit: cover; /* Щоб камера не розтягувалась криво */
+}
+
+#ai-canvas {
+    z-index: 11; /* Рамки поверх відео */
+}
+
+/* Розумна лінія капота / керма */
+#hood-line {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background: rgba(241, 196, 15, 0.8); /* Жовтий */
+    box-shadow: 0 0 10px #f1c40f;
+    z-index: 12;
+    top: 70%; /* Початкова висота */
+    opacity: 0; /* Прихована за замовчуванням */
+    transition: opacity 0.4s ease-in-out; 
+}
+
+#hood-line-text {
+    position: absolute;
+    top: -22px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #f1c40f;
+    font-size: 0.9rem;
+    font-weight: bold;
+    font-family: monospace;
+    text-shadow: 0 0 5px #000;
+    pointer-events: none;
+}
+
+/* Режим увімкненого радара (Зміщуємо спідометр) */
+body.radar-active {
+    background-color: transparent; /* Щоб було видно камеру */
+}
+
+body.radar-active #speed-container {
+    position: absolute;
+    top: 20px;
+    right: 70px; /* Зсуваємо від шестерні */
+    margin: 0;
+    text-align: right;
+    z-index: 20;
+}
+
+body.radar-active #speed-display {
+    font-size: 80px; /* Зменшуємо цифри */
+    color: #00FF00;  /* Яскраво-зелений, як ти просив */
+    text-shadow: 0 0 15px #00FF00, 0 0 30px #000; /* Контраст на тлі дороги */
+}
+
+body.radar-active #unit {
+    font-size: 16px;
+    color: #00FF00;
+    text-shadow: 0 0 5px #000;
+}
+
+body.radar-active #status-text, 
+body.radar-active #dusya-btn {
+    z-index: 20;
+    position: relative;
+    margin-top: auto; /* Опускаємо вниз */
+    margin-bottom: 20px;
+    background-color: rgba(0,0,0,0.5); /* Напівпрозорий фон для читабельності */
+}
+
+/* ========================================= */
 
 /* Кнопка шестірні */
 #settings-btn {
@@ -24,22 +109,25 @@ body {
     cursor: pointer;
     opacity: 0.5;
     transition: opacity 0.3s;
+    z-index: 100;
 }
 
 #settings-btn:hover {
     opacity: 1;
 }
 
-/* Блок спідометра */
+/* Блок спідометра (Стандартний) */
 #speed-container {
     text-align: center;
     margin-bottom: 30px;
+    transition: all 0.3s ease;
 }
 
 #speed-display {
     font-size: 180px; 
     font-weight: bold;
     line-height: 1;
+    transition: all 0.3s ease;
 }
 
 #unit {
@@ -54,6 +142,8 @@ body {
     height: 30px;
     text-align: center;
     max-width: 90%;
+    border-radius: 10px;
+    padding: 0 10px;
 }
 
 #dusya-btn {
@@ -113,6 +203,7 @@ body {
     border: 1px solid #555;
     background-color: #333;
     color: white;
+    box-sizing: border-box;
 }
 
 .modal-buttons button {
@@ -125,12 +216,12 @@ body {
     font-weight: bold;
 }
 
-#save-key-btn {
+#save-settings-btn {
     background-color: #00FF00;
     color: black;
 }
 
-#close-modal-btn {
+#close-settings-btn {
     background-color: #555;
     color: white;
 }
