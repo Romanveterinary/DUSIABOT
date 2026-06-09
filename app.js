@@ -23,7 +23,7 @@ window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices(
 // ==========================================
 // 1. НАЛАШТУВАННЯ ТА ЗМІННІ СТАНУ 
 // ==========================================
-console.log("Запуск Дусі v5.6: Велосипед, Собаки, НЛО та Харлей!");
+console.log("Запуск Дусі v5.7: Тотальна Стабільність та Офлайн-Запобіжники!");
 
 const speedElement = document.getElementById('speed-display');
 const statusElement = document.getElementById('status-text');
@@ -122,7 +122,6 @@ function resetVisuals() {
     speedElement.style.textShadow = "none";
 }
 
-// Функція тотального очищення всіх фонових звуків
 function stopAllSounds() {
     activeLoopOscillators.forEach(osc => { try { osc.stop(); osc.disconnect(); } catch(e){} });
     activeLoopOscillators = [];
@@ -175,35 +174,7 @@ function playMagicSound() {
     } catch(e){}
 }
 
-// НОВЕ: Ультразвук для собак
-function playDogRepeller() {
-    stopAllSounds();
-    try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator(); const gain = ctx.createGain();
-        osc.type = 'sine'; 
-        // Плаваюча частота від 15kHz до 22kHz
-        osc.frequency.setValueAtTime(15000, ctx.currentTime);
-        osc.frequency.linearRampToValueAtTime(22000, ctx.currentTime + 0.5);
-        osc.frequency.linearRampToValueAtTime(15000, ctx.currentTime + 1.0);
-        
-        gain.gain.setValueAtTime(1.0, ctx.currentTime); // Максимальна гучність
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.start();
-        activeLoopOscillators.push(osc);
-        
-        let interval = setInterval(() => {
-            if(osc && osc.frequency) {
-                osc.frequency.setValueAtTime(15000, ctx.currentTime);
-                osc.frequency.linearRampToValueAtTime(22000, ctx.currentTime + 0.5);
-                osc.frequency.linearRampToValueAtTime(15000, ctx.currentTime + 1.0);
-            }
-        }, 1000);
-        activeIntervals.push(interval);
-    } catch(e){}
-}
-
-// НОВЕ: Велосипедний дзвінок (Цикл)
+// Велосипедний дзвінок (Цикл)
 function playBikeBellLoop() {
     stopAllSounds();
     const ring = () => {
@@ -221,35 +192,7 @@ function playBikeBellLoop() {
     activeIntervals.push(setInterval(ring, 2500));
 }
 
-// НОВЕ: Харлей V-Twin (Генерація)
-function playMotorcycleLoop() {
-    stopAllSounds();
-    try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator(); const gain = ctx.createGain();
-        osc.type = 'sawtooth';
-        
-        // Створюємо низьку "дирчащу" частоту
-        osc.frequency.setValueAtTime(40, ctx.currentTime);
-        
-        // Модулюємо гучність для ефекту поршнів
-        const lfo = ctx.createOscillator();
-        lfo.type = 'sine';
-        lfo.frequency.setValueAtTime(12, ctx.currentTime); // 12 ударів на секунду
-        const lfoGain = ctx.createGain();
-        lfoGain.gain.setValueAtTime(0.8, ctx.currentTime);
-        
-        lfo.connect(lfoGain); lfoGain.connect(gain.gain);
-        
-        gain.gain.setValueAtTime(0.2, ctx.currentTime);
-        osc.connect(gain); gain.connect(ctx.destination);
-        
-        osc.start(); lfo.start();
-        activeLoopOscillators.push(osc); activeLoopOscillators.push(lfo);
-    } catch(e){}
-}
-
-// НОВЕ: НЛО (Космічний гул)
+// НЛО (Космічний гул)
 function playUFOLoop() {
     stopAllSounds();
     try {
@@ -272,33 +215,6 @@ function playUFOLoop() {
         
         osc.start(); lfo.start();
         activeLoopOscillators.push(osc); activeLoopOscillators.push(lfo);
-    } catch(e){}
-}
-
-// НОВЕ: Собачий гавкіт (Base64 міні)
-function playBark() {
-    stopAllSounds();
-    const barkAudio = new Audio("data:audio/mp3;base64,//OExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq/8zEAAAAAA0gAAAAATEFNRTMuMTAwqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqr/zMQAAAAADSAAAAABMYW1lMy4xMDCqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqv/MxAAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"); // Заглушка, оскільки реальний mp3 занадто довгий для тексту, ми використаємо жорсткий синтез нижче.
-    
-    try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator(); const gain = ctx.createGain();
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(150, ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 0.2);
-        gain.gain.setValueAtTime(0.8, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.start(); osc.stop(ctx.currentTime + 0.3);
-        
-        setTimeout(() => {
-            const osc2 = ctx.createOscillator(); const gain2 = ctx.createGain();
-            osc2.type = 'sawtooth'; osc2.frequency.setValueAtTime(200, ctx.currentTime);
-            osc2.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.4);
-            gain2.gain.setValueAtTime(1.0, ctx.currentTime); gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
-            osc2.connect(gain2); gain2.connect(ctx.destination);
-            osc2.start(); osc2.stop(ctx.currentTime + 0.4);
-        }, 300);
     } catch(e){}
 }
 
@@ -341,7 +257,12 @@ function openYouTubeApp(query) {
 // 4. GPS КАРТИ, ПОГОДА ТА ЗОНИ 
 // ==========================================
 async function checkLocationAndZone() {
-    if (!currentLat || !currentLon) return;
+    if (!currentLat || !currentLon) {
+        if (isAutoGuideActive && lastPlaceName !== "") {
+           speak(`Сигнал GPS слабкий, але ми все ще в районі ${lastPlaceName}.`);
+        }
+        return;
+    }
     try {
         let res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${currentLat}&lon=${currentLon}&format=json&accept-language=uk`);
         let data = await res.json();
@@ -373,7 +294,11 @@ async function checkLocationAndZone() {
                 else if (!isCurrentlyInCity && isInCityZone) { isInCityZone = false; speak(`Населений пункт закінчився. Можна 90.`); }
             }
         }
-    } catch(e) { }
+    } catch(e) { 
+        if (isAutoGuideActive && lastPlaceName !== "") {
+           speak(`Не маю доступу до карти, але ми приблизно біля ${lastPlaceName}.`);
+        }
+    }
 }
 
 async function handleWeatherCommand(city) {
@@ -410,7 +335,9 @@ async function handleWeatherCommand(city) {
 // 5. МІЗКИ ШІ
 // ==========================================
 async function askDusyaAI(userQuestion) {
-    if (!navigator.onLine) return "Немає зв'язку з інтернетом.";
+    if (!navigator.onLine) {
+        return "Інтернет відсутній. Працюю як офлайн-спідометр.";
+    }
     let apiKey = localStorage.getItem('gemini_api_key');
     if (!apiKey) return "Будь ласка, введіть API ключ у налаштуваннях.";
     
@@ -449,7 +376,7 @@ async function askDusyaAI(userQuestion) {
         return aiText;
     } catch (error) {
         clearTimeout(timeoutId);
-        if (error.name === 'AbortError') return "Інтернет занадто слабкий.";
+        if (error.name === 'AbortError') return "Інтернет занадто слабкий. Переходжу в офлайн режим.";
         return "Тимчасові проблеми зі зв'язком з інтернетом.";
     }
 }
@@ -510,25 +437,13 @@ if (SpeechRecognition) {
             if(recognition) recognition.stop();
             speak("Вело-штурман активований! Крути педалі, я слідкую за маршрутом і швидкістю."); return;
         }
-        
-        // Відлякувачі собак
-        if (transcript.includes("налякай") || transcript.includes("фас")) {
-            if(recognition) recognition.stop(); speak("Атакую!", playBark); return;
-        }
-        if (transcript.includes("собаки")) {
-            if(recognition) recognition.stop(); speak("Вмикаю ультразвуковий захист!", playDogRepeller); return;
-        }
 
         // Розгін натовпу
         if (transcript.includes("багато людей")) {
             if(recognition) recognition.stop(); speak("Вмикаю попереджувальний сигнал.", playBikeBellLoop); return;
         }
 
-        // Мотоцикл і НЛО
-        if (transcript.includes("мотоцикл") || transcript.includes("харлей")) {
-            document.body.style.backgroundColor = "#FF4500"; // Оранжевий
-            if(recognition) recognition.stop(); speak("Заводжу V-Twin. Поїхали!", playMotorcycleLoop); return;
-        }
+        // НЛО
         if (transcript.includes("режим нло") || transcript.includes("космічний корабель")) {
             document.body.style.backgroundColor = "#191970"; // Midnight Blue
             speedElement.style.color = "#00FFFF"; // Cyan
@@ -578,7 +493,7 @@ if (SpeechRecognition) {
             if (recognition) recognition.stop(); speak(`Зараз наша швидкість ${gpsSpeed}.`); return;
         }
         if (transcript.includes("що ти вмієш") || transcript.includes("розкажи команди")) {
-            if (recognition) recognition.stop(); speak("Я вмію бути вело-штурманом, лякати собак, вмикати Харлей, записувати замітки, шукати в Ютубі та пам'ятати парковку."); return;
+            if (recognition) recognition.stop(); speak("Я вмію бути вело-штурманом, записувати замітки, шукати в Ютубі та пам'ятати парковку."); return;
         }
 
         // --- ПАСХАЛКА ДЛЯ УЛІ ---
