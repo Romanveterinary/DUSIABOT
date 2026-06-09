@@ -23,7 +23,7 @@ window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices(
 // ==========================================
 // 1. НАЛАШТУВАННЯ ТА ЗМІННІ СТАНУ 
 // ==========================================
-console.log("Запуск Дусі v5.8: Інтеграція прозорого скла та радара!");
+console.log("Запуск Дусі v5.9: ШІ-Радар та Екстрене Гальмування!");
 
 const speedElement = document.getElementById('speed-display');
 const statusElement = document.getElementById('status-text');
@@ -47,6 +47,11 @@ let isRadarActive = false;
 let aiStream = null;
 let aiSens = 60;
 let aiFocal = 1.0;
+let aiModel = null;
+let lastBeepTime = 0;
+
+const TARGET_CLASSES = ['person', 'car', 'truck', 'bus', 'motorcycle', 'bicycle', 'cat', 'dog', 'stop sign'];
+const REAL_HEIGHTS = { 'person': 1.7, 'car': 1.5, 'truck': 3.0, 'bus': 3.0, 'motorcycle': 1.2, 'bicycle': 1.2, 'cat': 0.3, 'dog': 0.5, 'stop sign': 1.0 };
 
 let currentMode = "DEFAULT"; 
 let chatHistory = [];        
@@ -120,7 +125,6 @@ window.addEventListener('DOMContentLoaded', () => {
         const savedKey = localStorage.getItem('gemini_api_key'); 
         if (savedKey) apiKeyInput.value = savedKey; 
         
-        // Завантаження налаштувань радара
         const savedSens = localStorage.getItem('dusya_ai_sens');
         if (savedSens && aiSensSlider) { aiSensSlider.value = savedSens; aiSensVal.innerText = savedSens + "%"; aiSens = parseInt(savedSens); }
         
@@ -136,7 +140,6 @@ window.addEventListener('DOMContentLoaded', () => {
     if (speedElement) { speedElement.style.fontSize = "25vh"; speedElement.style.lineHeight = "1.2"; speedElement.style.fontWeight = "900"; }
 });
 
-// Живе оновлення тексту повзунків
 if (aiSensSlider) aiSensSlider.oninput = (e) => aiSensVal.innerText = e.target.value + "%";
 if (aiFocalSlider) aiFocalSlider.oninput = (e) => aiFocalVal.innerText = e.target.value;
 
@@ -147,11 +150,9 @@ saveSettingsBtn.addEventListener('click', () => {
     const key = apiKeyInput.value.trim();
     if (key) { localStorage.setItem('gemini_api_key', key); }
     
-    // Збереження повзунків
     if (aiSensSlider) { localStorage.setItem('dusya_ai_sens', aiSensSlider.value); aiSens = parseInt(aiSensSlider.value); }
     if (aiFocalSlider) { localStorage.setItem('dusya_ai_focal', aiFocalSlider.value); aiFocal = parseFloat(aiFocalSlider.value); }
 
-    // Увімкнення/Вимкнення камери радара
     if (aiRadarToggle && aiRadarToggle.checked !== isRadarActive) {
         toggleRadar(aiRadarToggle.checked);
     }
@@ -160,37 +161,8 @@ saveSettingsBtn.addEventListener('click', () => {
     setTimeout(() => { settingsModal.classList.add('hidden'); saveSettingsBtn.innerText = "Зберегти"; }, 1000);
 });
 
-// Функція запуску/зупинки прозорого скла (Камери)
-async function toggleRadar(turnOn) {
-    isRadarActive = turnOn;
-    const radarLayer = document.getElementById('ai-radar-layer');
-    const video = document.getElementById('ai-video');
-    
-    if (turnOn) {
-        document.body.classList.add('radar-active');
-        radarLayer.style.display = 'block';
-        try {
-            aiStream = await navigator.mediaDevices.getUserMedia({video: {facingMode: "environment"}});
-            video.srcObject = aiStream;
-            wakeUpHoodLine();
-        } catch(e) {
-            speak("Немає доступу до камери");
-            toggleRadar(false);
-            if(aiRadarToggle) aiRadarToggle.checked = false;
-        }
-    } else {
-        document.body.classList.remove('radar-active');
-        radarLayer.style.display = 'none';
-        if (aiStream) {
-            aiStream.getTracks().forEach(t => t.stop());
-            aiStream = null;
-        }
-        if (video) video.srcObject = null;
-    }
-}
-
 // ==========================================
-// ЛОГІКА "ЛІНІЇ КАПОТА" (ЗНИКНЕННЯ ТА ПЕРЕТЯГУВАННЯ)
+// ЛОГІКА "ЛІНІЇ КАПОТА" 
 // ==========================================
 const hoodLine = document.getElementById('hood-line');
 let hideLineTimeout = null;
@@ -213,11 +185,7 @@ document.addEventListener('touchstart', wakeUpHoodLine);
 document.addEventListener('mousedown', wakeUpHoodLine);
 
 if (hoodLine) {
-    hoodLine.addEventListener('touchstart', (e) => {
-        isDraggingLine = true;
-        wakeUpHoodLine();
-    });
-
+    hoodLine.addEventListener('touchstart', (e) => { isDraggingLine = true; wakeUpHoodLine(); });
     document.addEventListener('touchmove', (e) => {
         if (!isDraggingLine) return;
         let touchY = e.touches[0].clientY;
@@ -228,11 +196,7 @@ if (hoodLine) {
         }
         wakeUpHoodLine();
     });
-
-    document.addEventListener('touchend', () => {
-        isDraggingLine = false;
-        wakeUpHoodLine();
-    });
+    document.addEventListener('touchend', () => { isDraggingLine = false; wakeUpHoodLine(); });
 }
 
 function resetVisuals() {
@@ -250,8 +214,157 @@ function stopAllSounds() {
 }
 
 // ==========================================
+// ШІ-РАДАР ТА ВІДЕО-АНАЛІЗ
+// ==========================================
+async function loadAILibraries() {
+    return new Promise((resolve) => {
+        if (window.cocoSsd) return resolve();
+        statusElement.innerText = "Дуся: Завантажую ШІ (1/2)...";
+        const tfScript = document.createElement('script');
+        tfScript.src = "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs";
+        tfScript.onload = () => {
+            statusElement.innerText = "Дуся: Завантажую ШІ (2/2)...";
+            const cocoScript = document.createElement('script');
+            cocoScript.src = "https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd";
+            cocoScript.onload = () => {
+                statusElement.innerText = "Дуся: ШІ Готовий!";
+                resolve();
+            };
+            document.head.appendChild(cocoScript);
+        };
+        document.head.appendChild(tfScript);
+    });
+}
+
+async function toggleRadar(turnOn) {
+    isRadarActive = turnOn;
+    const radarLayer = document.getElementById('ai-radar-layer');
+    const video = document.getElementById('ai-video');
+    
+    if (turnOn) {
+        document.body.classList.add('radar-active');
+        radarLayer.style.display = 'block';
+        try {
+            aiStream = await navigator.mediaDevices.getUserMedia({video: {facingMode: "environment"}});
+            video.srcObject = aiStream;
+            wakeUpHoodLine();
+            
+            await loadAILibraries();
+            if (!aiModel) aiModel = await cocoSsd.load();
+            detectAI(); // Запуск циклу аналізу
+        } catch(e) {
+            speak("Немає доступу до камери");
+            toggleRadar(false);
+            if(aiRadarToggle) aiRadarToggle.checked = false;
+        }
+    } else {
+        document.body.classList.remove('radar-active');
+        radarLayer.style.display = 'none';
+        if (aiStream) { aiStream.getTracks().forEach(t => t.stop()); aiStream = null; }
+        if (video) video.srcObject = null;
+        
+        const canvas = document.getElementById('ai-canvas');
+        if(canvas) canvas.getContext('2d').clearRect(0,0, canvas.width, canvas.height);
+    }
+}
+
+async function detectAI() {
+    if (!isRadarActive || !aiModel || !aiStream) return;
+    const video = document.getElementById('ai-video');
+    const canvas = document.getElementById('ai-canvas');
+    const ctx = canvas.getContext('2d');
+    
+    if (video.readyState === 4) {
+        // Синхронізуємо розмір полотна з реальним відео
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        
+        const predictions = await aiModel.detect(video);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Вираховуємо лінію капота у пікселях відео
+        let hoodYPercent = parseFloat(localStorage.getItem('dusya_hood_y')) || 70;
+        let hoodYPixel = (hoodYPercent / 100) * canvas.height;
+
+        let isDanger = false;
+
+        predictions.forEach(p => {
+            if (p.score < (aiSens / 100)) return; // Відсікаємо фантомів
+            if (!TARGET_CLASSES.includes(p.class)) return; // Фільтруємо сміття
+
+            const [x, y, w, h] = p.bbox;
+            let realH = REAL_HEIGHTS[p.class];
+            let dist = (realH * (canvas.height * aiFocal)) / h; // Розрахунок дистанції
+            
+            let bottomY = y + h; // Точка дотику коліс/ніг до асфальту
+            
+            let color = "#00FF00"; // Зелений (Безпечно)
+            
+            // Якщо об'єкт перетнув лінію капота
+            if (bottomY >= hoodYPixel) {
+                color = "#FF0000"; // Червоний (ЗІТКНЕННЯ!)
+                isDanger = true;
+            } else if (bottomY >= hoodYPixel - (canvas.height * 0.15)) {
+                color = "#FFFF00"; // Жовтий (Увага)
+            }
+
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 4;
+            ctx.strokeRect(x, y, w, h);
+            
+            ctx.fillStyle = color;
+            ctx.font = "bold 24px monospace";
+            // Малюємо підпис над рамкою
+            ctx.fillText(`${p.class.toUpperCase()} ~${Math.round(dist)}m`, x, y - 10);
+        });
+
+        // Екстрене реагування
+        if (isDanger) {
+            let now = Date.now();
+            if (now - lastBeepTime > 1500) { // Кричимо не частіше, ніж раз на 1.5 сек
+                playDangerBeep();
+                if (isBikeMode) playBikeBellAlert(); // Якщо на велику - дзвонимо пішоходу
+                lastBeepTime = now;
+            }
+        }
+    }
+    
+    // Зациклюємо аналіз
+    if (isRadarActive) requestAnimationFrame(detectAI);
+}
+
+// ==========================================
 // 3. ЗВУКОВІ МАЯКИ ТА СПЕЦЕФЕКТИ 
 // ==========================================
+function playDangerBeep() {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(800, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.3);
+        gain.gain.setValueAtTime(1.0, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.3);
+    } catch(e) {}
+}
+
+function playBikeBellAlert() {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const gain = ctx.createGain(); gain.connect(ctx.destination);
+        gain.gain.setValueAtTime(0.5, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
+        const osc1 = ctx.createOscillator(); osc1.type = 'sine'; osc1.frequency.setValueAtTime(2000, ctx.currentTime);
+        const osc2 = ctx.createOscillator(); osc2.type = 'triangle'; osc2.frequency.setValueAtTime(2050, ctx.currentTime);
+        osc1.connect(gain); osc2.connect(gain);
+        osc1.start(); osc2.start(); osc1.stop(ctx.currentTime + 0.8); osc2.stop(ctx.currentTime + 0.8);
+    } catch(e){}
+}
+
 function playPing() { 
     try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -337,7 +450,7 @@ function playUFOLoop() {
 }
 
 function speak(text, onEndCallback = null) {
-    // ЯКЩО РАДАР УВІМКНЕНО - МАКСИМАЛЬНА ТИША (Дуся не розмовляє)
+    // ЯКЩО РАДАР УВІМКНЕНО - МАКСИМАЛЬНА ТИША (Дуся не відволікає)
     if (isRadarActive) {
         if (onEndCallback) onEndCallback();
         return; 
