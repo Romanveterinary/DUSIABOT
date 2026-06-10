@@ -23,7 +23,7 @@ window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices(
 // ==========================================
 // 1. НАЛАШТУВАННЯ ТА ЗМІННІ СТАНУ 
 // ==========================================
-console.log("Запуск Дусі v5.9: ШІ-Радар та Екстрене Гальмування!");
+console.log("Запуск Дусі v6.0: ШІ-Радар, Сон Мікрофона та Локальні Перехоплювачі!");
 
 const speedElement = document.getElementById('speed-display');
 const statusElement = document.getElementById('status-text');
@@ -140,8 +140,17 @@ window.addEventListener('DOMContentLoaded', () => {
     if (speedElement) { speedElement.style.fontSize = "25vh"; speedElement.style.lineHeight = "1.2"; speedElement.style.fontWeight = "900"; }
 });
 
-if (aiSensSlider) aiSensSlider.oninput = (e) => aiSensVal.innerText = e.target.value + "%";
-if (aiFocalSlider) aiFocalSlider.oninput = (e) => aiFocalVal.innerText = e.target.value;
+// Живе оновлення тексту повзунків на екрані
+if (aiSensSlider) aiSensSlider.oninput = (e) => {
+    aiSensVal.innerText = e.target.value + "%";
+    aiSens = parseInt(e.target.value);
+    localStorage.setItem('dusya_ai_sens', e.target.value);
+};
+if (aiFocalSlider) aiFocalSlider.oninput = (e) => {
+    aiFocalVal.innerText = e.target.value;
+    aiFocal = parseFloat(e.target.value);
+    localStorage.setItem('dusya_ai_focal', e.target.value);
+};
 
 settingsBtn.addEventListener('click', () => settingsModal.classList.remove('hidden'));
 closeSettingsBtn.addEventListener('click', () => settingsModal.classList.add('hidden'));
@@ -149,9 +158,6 @@ closeSettingsBtn.addEventListener('click', () => settingsModal.classList.add('hi
 saveSettingsBtn.addEventListener('click', () => {
     const key = apiKeyInput.value.trim();
     if (key) { localStorage.setItem('gemini_api_key', key); }
-    
-    if (aiSensSlider) { localStorage.setItem('dusya_ai_sens', aiSensSlider.value); aiSens = parseInt(aiSensSlider.value); }
-    if (aiFocalSlider) { localStorage.setItem('dusya_ai_focal', aiFocalSlider.value); aiFocal = parseFloat(aiFocalSlider.value); }
 
     if (aiRadarToggle && aiRadarToggle.checked !== isRadarActive) {
         toggleRadar(aiRadarToggle.checked);
@@ -162,21 +168,34 @@ saveSettingsBtn.addEventListener('click', () => {
 });
 
 // ==========================================
-// ЛОГІКА "ЛІНІЇ КАПОТА" 
+// ЛОГІКА "ЛІНІЇ КАПОТА" ТА КЕРУВАННЯ РАДАРОМ
 // ==========================================
 const hoodLine = document.getElementById('hood-line');
+const radarControls = document.getElementById('radar-controls');
+const exitRadarBtn = document.getElementById('exit-radar-btn');
+
 let hideLineTimeout = null;
 let isDraggingLine = false;
+
+// Вихід з радара по кнопці
+if (exitRadarBtn) {
+    exitRadarBtn.addEventListener('click', () => {
+        if(aiRadarToggle) aiRadarToggle.checked = false;
+        toggleRadar(false);
+    });
+}
 
 function wakeUpHoodLine() {
     if (!hoodLine || !isRadarActive) return;
     hoodLine.style.opacity = '1';
+    if (radarControls) radarControls.classList.add('visible');
     
     if (hideLineTimeout) clearTimeout(hideLineTimeout);
     
     hideLineTimeout = setTimeout(() => {
         if (!isDraggingLine) {
             hoodLine.style.opacity = '0';
+            if (radarControls) radarControls.classList.remove('visible');
         }
     }, 5000);
 }
@@ -244,6 +263,11 @@ async function toggleRadar(turnOn) {
     if (turnOn) {
         document.body.classList.add('radar-active');
         radarLayer.style.display = 'block';
+        
+        // ЗУПИНЯЄМО ДУСЮ (Мікрофон спить для економії ресурсів)
+        if (recognition) { try { recognition.stop(); } catch(e){} }
+        statusElement.innerText = "Радар активний (Мікрофон вимкнено)";
+        
         try {
             aiStream = await navigator.mediaDevices.getUserMedia({video: {facingMode: "environment"}});
             video.srcObject = aiStream;
@@ -251,7 +275,7 @@ async function toggleRadar(turnOn) {
             
             await loadAILibraries();
             if (!aiModel) aiModel = await cocoSsd.load();
-            detectAI(); // Запуск циклу аналізу
+            detectAI(); 
         } catch(e) {
             speak("Немає доступу до камери");
             toggleRadar(false);
@@ -265,6 +289,13 @@ async function toggleRadar(turnOn) {
         
         const canvas = document.getElementById('ai-canvas');
         if(canvas) canvas.getContext('2d').clearRect(0,0, canvas.width, canvas.height);
+        
+        // БУДИМО ДУСЮ
+        if (isListening && recognition) { 
+            try { recognition.start(); statusElement.innerText = "Дуся: Слухаю..."; } catch(e){} 
+        } else if (!isListening) {
+            statusElement.innerText = "Вимкнена";
+        }
     }
 }
 
@@ -275,37 +306,33 @@ async function detectAI() {
     const ctx = canvas.getContext('2d');
     
     if (video.readyState === 4) {
-        // Синхронізуємо розмір полотна з реальним відео
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         
         const predictions = await aiModel.detect(video);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        // Вираховуємо лінію капота у пікселях відео
         let hoodYPercent = parseFloat(localStorage.getItem('dusya_hood_y')) || 70;
         let hoodYPixel = (hoodYPercent / 100) * canvas.height;
 
         let isDanger = false;
 
         predictions.forEach(p => {
-            if (p.score < (aiSens / 100)) return; // Відсікаємо фантомів
-            if (!TARGET_CLASSES.includes(p.class)) return; // Фільтруємо сміття
+            if (p.score < (aiSens / 100)) return; 
+            if (!TARGET_CLASSES.includes(p.class)) return; 
 
             const [x, y, w, h] = p.bbox;
             let realH = REAL_HEIGHTS[p.class];
-            let dist = (realH * (canvas.height * aiFocal)) / h; // Розрахунок дистанції
+            let dist = (realH * (canvas.height * aiFocal)) / h; 
             
-            let bottomY = y + h; // Точка дотику коліс/ніг до асфальту
+            let bottomY = y + h; 
+            let color = "#00FF00"; 
             
-            let color = "#00FF00"; // Зелений (Безпечно)
-            
-            // Якщо об'єкт перетнув лінію капота
             if (bottomY >= hoodYPixel) {
-                color = "#FF0000"; // Червоний (ЗІТКНЕННЯ!)
+                color = "#FF0000"; 
                 isDanger = true;
             } else if (bottomY >= hoodYPixel - (canvas.height * 0.15)) {
-                color = "#FFFF00"; // Жовтий (Увага)
+                color = "#FFFF00"; 
             }
 
             ctx.strokeStyle = color;
@@ -314,22 +341,19 @@ async function detectAI() {
             
             ctx.fillStyle = color;
             ctx.font = "bold 24px monospace";
-            // Малюємо підпис над рамкою
             ctx.fillText(`${p.class.toUpperCase()} ~${Math.round(dist)}m`, x, y - 10);
         });
 
-        // Екстрене реагування
         if (isDanger) {
             let now = Date.now();
-            if (now - lastBeepTime > 1500) { // Кричимо не частіше, ніж раз на 1.5 сек
+            if (now - lastBeepTime > 1500) { 
                 playDangerBeep();
-                if (isBikeMode) playBikeBellAlert(); // Якщо на велику - дзвонимо пішоходу
+                if (isBikeMode) playBikeBellAlert(); 
                 lastBeepTime = now;
             }
         }
     }
     
-    // Зациклюємо аналіз
     if (isRadarActive) requestAnimationFrame(detectAI);
 }
 
@@ -450,7 +474,6 @@ function playUFOLoop() {
 }
 
 function speak(text, onEndCallback = null) {
-    // ЯКЩО РАДАР УВІМКНЕНО - МАКСИМАЛЬНА ТИША (Дуся не відволікає)
     if (isRadarActive) {
         if (onEndCallback) onEndCallback();
         return; 
@@ -473,7 +496,7 @@ function speak(text, onEndCallback = null) {
             playChime(); 
             if (onEndCallback) {
                 onEndCallback();
-            } else if (isListening && !window.speechSynthesis.speaking && !isRecordingNote && !isWaitingForCleanupConfirm) {
+            } else if (isListening && !isRadarActive && !window.speechSynthesis.speaking && !isRecordingNote && !isWaitingForCleanupConfirm) {
                 try { 
                     recognition.start(); 
                     statusElement.innerText = "Дуся: Слухаю..."; 
@@ -481,7 +504,7 @@ function speak(text, onEndCallback = null) {
                 } catch(e) { }
             }
         };
-        utterance.onerror = () => { if (isListening && !isRecordingNote) { try { recognition.start(); dusyaBtn.style.backgroundColor = "#00FF00"; } catch(e) { } } };
+        utterance.onerror = () => { if (isListening && !isRadarActive && !isRecordingNote) { try { recognition.start(); dusyaBtn.style.backgroundColor = "#00FF00"; } catch(e) { } } };
         window.speechSynthesis.speak(utterance);
     }
 }
@@ -661,28 +684,75 @@ if (SpeechRecognition) {
             return;
         }
 
+        // --- ШПАРГАЛКА КОМАНД (Локальна) ---
+        if (transcript.match(/(що ти вмієш|розкажи команди|команди|що ти можеш|допомога|функції|як тобою керувати)/i)) {
+            if (recognition) recognition.stop(); 
+            speak("Я працюю локально. Скажи 'Включи Ютуб' для музики. Скажи 'Запам'ятай парковку', щоб знайти авто. Скажи 'Покажи заправки' для мапи. Скажи 'Запиши замітку' для сейфа. Або скажи 'Режим балабола' для розваг."); 
+            return;
+        }
+
+        // --- YOUTUBE ТА МУЗИКА (Жорсткий локальний перехоплювач) ---
+        let ytMatch = transcript.match(/(?:включи|відкрий|знайди)\s+(?:пісню|музику|в ютубі|на ютубі|ютуб)?\s*(.*)/i);
+        if (ytMatch && (transcript.includes("ютуб") || transcript.includes("включи") || transcript.includes("пісню") || transcript.includes("відкрий"))) {
+            let ytQuery = ytMatch[1] ? ytMatch[1].trim() : ""; 
+            if (recognition) recognition.stop(); 
+            if (ytQuery) {
+                speak(`Відкриваю ${ytQuery} на Ютубі.`); 
+                openYouTubeApp(ytQuery); 
+            } else {
+                speak("Відкриваю Ютуб."); 
+                window.open(`https://www.youtube.com`, '_blank');
+            }
+            return;
+        }
+
+        // --- ЛОКАЛЬНИЙ ПОШУК ОБ'ЄКТІВ НА МАПІ ---
+        let mapMatch = transcript.match(/(?:покажи|знайди)\s+(заправки|заправку|кафе|макдональдс|пам'ятки|ресторани|магазини|аптеки|аптеку|туалет|парковки)/i);
+        if (mapMatch && mapMatch[1]) {
+            if (recognition) recognition.stop();
+            let query = mapMatch[1].trim();
+            speak(`Відкриваю результати пошуку: ${query}.`);
+            window.open(`http://maps.google.com/maps?q=${encodeURIComponent(query)}`, '_blank');
+            return;
+        }
+
+        // --- ПАРКУВАЛЬНА ПАМ'ЯТЬ (Розширена) ---
+        if (transcript.match(/(запам'ятай парковку|запам'ятай машину|я припаркувався|тут залишаю машину|відміть точку парковки|запам'ятай місце)/i)) {
+            if (currentLat && currentLon) {
+                localStorage.setItem('dusya_parking', JSON.stringify({lat: currentLat, lon: currentLon}));
+                if (recognition) recognition.stop(); speak("Зрозуміла, координати збережено. Машина під наглядом!");
+            } else { if (recognition) recognition.stop(); speak("Немає сигналу GPS."); }
+            return;
+        }
+        if (transcript.match(/(де моя машина|знайди машину|де машина|де стоянка|дорогу до машини|покажи дорогу назад)/i)) {
+            let parkingData = localStorage.getItem('dusya_parking'); if (recognition) recognition.stop();
+            if (parkingData) {
+                let p = JSON.parse(parkingData); 
+                window.open(`http://maps.google.com/maps?daddr=${p.lat},${p.lon}&dirflg=w`, '_blank');
+                speak("Будую пішохідний маршрут до машини.");
+            } else { speak("Я не пам'ятаю, де ви припаркувалися."); }
+            return;
+        }
+
         // --- 2. ВЕЛО-ФІШКИ ТА ТРАНСПОРТНІ ПАСХАЛКИ ---
         if (transcript.includes("режим велосипеда") || transcript.includes("я на велику")) {
             isBikeMode = true;
-            document.body.style.backgroundColor = "#004d00"; // Темно-зелений
+            document.body.style.backgroundColor = "#004d00"; 
             speedElement.style.color = "#00FF00";
             if(recognition) recognition.stop();
             speak("Вело-штурман активований! Крути педалі, я слідкую за маршрутом і швидкістю."); return;
         }
 
-        // Розгін натовпу
         if (transcript.includes("багато людей")) {
             if(recognition) recognition.stop(); speak("Вмикаю попереджувальний сигнал.", playBikeBellLoop); return;
         }
 
-        // НЛО
         if (transcript.includes("режим нло") || transcript.includes("космічний корабель")) {
-            document.body.style.backgroundColor = "#191970"; // Midnight Blue
-            speedElement.style.color = "#00FFFF"; // Cyan
+            document.body.style.backgroundColor = "#191970"; 
+            speedElement.style.color = "#00FFFF"; 
             if(recognition) recognition.stop(); speak("Гіпер-двигун активовано.", playUFOLoop); return;
         }
 
-        // Навігація в Картах
         let routeMatch = transcript.match(/(?:маршрут до|доїхати до|найближча)\s+(.*)/i);
         if (routeMatch && routeMatch[1]) {
             let target = routeMatch[1];
@@ -724,9 +794,6 @@ if (SpeechRecognition) {
         if (transcript.includes("яка швидкість")) {
             if (recognition) recognition.stop(); speak(`Зараз наша швидкість ${gpsSpeed}.`); return;
         }
-        if (transcript.includes("що ти вмієш") || transcript.includes("розкажи команди")) {
-            if (recognition) recognition.stop(); speak("Я вмію бути вело-штурманом, записувати замітки, шукати в Ютубі та пам'ятати парковку."); return;
-        }
 
         // --- ПАСХАЛКА ДЛЯ УЛІ ---
         if (transcript.includes("привітай улю") || transcript.includes("привітай уля") || transcript.includes("привіт уля")) {
@@ -737,12 +804,6 @@ if (SpeechRecognition) {
                 openYouTubeApp("трендові пісні для підлітків 2024");
             });
             return;
-        }
-
-        // --- YOUTUBE ---
-        let ytMatch = transcript.match(/(?:включи|відкрий|знайди)\s+(?:пісню|музику|в ютубі|на ютубі|ютуб)?\s*(.*)/i);
-        if (ytMatch && ytMatch[1] && ytMatch[1].trim() !== "") {
-            let ytQuery = ytMatch[1].trim(); if (recognition) recognition.stop(); speak(`Відкриваю ${ytQuery} на Ютубі.`); openYouTubeApp(ytQuery); return;
         }
 
         // --- ЗМІНА КОЛЬОРУ ---
@@ -773,23 +834,6 @@ if (SpeechRecognition) {
         }
         if (transcript.includes("видали всі замітки") || transcript.includes("очистити сейф")) {
             localStorage.removeItem('dusya_notes'); if (recognition) recognition.stop(); speak("Сейф порожній, всі замітки видалено."); return;
-        }
-
-        // --- ПАРКУВАЛЬНА ПАМ'ЯТЬ ---
-        if (transcript.includes("запам'ятай парковку") || transcript.includes("запам'ятай машину")) {
-            if (currentLat && currentLon) {
-                localStorage.setItem('dusya_parking', JSON.stringify({lat: currentLat, lon: currentLon}));
-                if (recognition) recognition.stop(); speak("Координати збережено.");
-            } else { if (recognition) recognition.stop(); speak("Немає сигналу GPS."); }
-            return;
-        }
-        if (transcript.includes("де моя машина") || transcript.includes("знайди машину")) {
-            let parkingData = localStorage.getItem('dusya_parking'); if (recognition) recognition.stop();
-            if (parkingData) {
-                let p = JSON.parse(parkingData); window.open(`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}&travelmode=walking`, '_blank');
-                speak("Відкриваю маршрут до авто.");
-            } else { speak("Я не пам'ятаю, де ви припаркувалися."); }
-            return;
         }
 
         // --- МАШИНА ЧАСУ ---
@@ -842,7 +886,11 @@ if (SpeechRecognition) {
         }
     };
 
-    recognition.onend = () => { if (isListening && !window.speechSynthesis.speaking && !isRecordingNote && !isWaitingForCleanupConfirm) { try { recognition.start(); } catch(e) {} } };
+    recognition.onend = () => { 
+        if (isListening && !isRadarActive && !window.speechSynthesis.speaking && !isRecordingNote && !isWaitingForCleanupConfirm) { 
+            try { recognition.start(); } catch(e) {} 
+        } 
+    };
 }
 
 // ==========================================
