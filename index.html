@@ -15,6 +15,18 @@
         <div id="hood-line">
             <div id="hood-line-text">ЛІНІЯ КАПОТА (Тягни)</div>
         </div>
+
+        <div id="radar-controls">
+            <button id="exit-radar-btn">🛑 ВИЙТИ З РАДАРА</button>
+            
+            <div class="radar-sliders">
+                <label>Впевненість ШІ: <span id="ai-sens-val">60%</span></label>
+                <input type="range" id="ai-sens-slider" min="30" max="90" step="5" value="60">
+                
+                <label>Калібрування фокусу: <span id="ai-focal-val">1.0</span></label>
+                <input type="range" id="ai-focal-slider" min="0.5" max="3.0" step="0.1" value="1.0">
+            </div>
+        </div>
     </div>
 
     <button id="settings-btn" title="Налаштування API">⚙️</button>
@@ -40,13 +52,6 @@
                 <input type="checkbox" id="ai-radar-toggle" style="width: 20px; height: 20px; accent-color: #0cf;">
                 <span style="font-weight: bold;">Увімкнути ШІ-відеосканер</span>
             </label>
-            
-            <label style="display: block; font-size: 0.8rem; color: #aaa; margin-bottom: 5px;">Впевненість ШІ: <span id="ai-sens-val">60%</span></label>
-            <input type="range" id="ai-sens-slider" min="30" max="90" step="5" value="60" style="width: 100%; margin-bottom: 15px;">
-            
-            <label style="display: block; font-size: 0.8rem; color: #aaa; margin-bottom: 5px;">Калібрування фокусу (відстань): <span id="ai-focal-val">1.0</span></label>
-            <input type="range" id="ai-focal-slider" min="0.5" max="3.0" step="0.1" value="1.0" style="width: 100%; margin-bottom: 20px;">
-
             <div class="modal-buttons">
                 <button id="save-settings-btn">Зберегти</button>
                 <button id="close-settings-btn">Закрити</button>
