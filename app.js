@@ -2,25 +2,14 @@
 // ГОЛОВНИЙ ДИСПЕТЧЕР (app.js)
 // ==========================================
 
-// 0. ПАРОЛЬ НА ВХІД ТА PWA (ОФЛАЙН РЕЖИМ)
-(function() {
-    const isAuth = localStorage.getItem('dusya_auth');
-    if (isAuth !== '2811') {
-        let pass = prompt("Введіть пароль для доступу до Дусі:");
-        if (pass === "2811") { localStorage.setItem('dusya_auth', '2811'); } 
-        else {
-            document.body.innerHTML = "<h2 style='color:red; text-align:center; padding-top:20vh; font-family:sans-serif;'>Доступ заборонено.</h2>";
-            throw new Error("Зупинка скрипта: невірний пароль.");
-        }
-    }
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/sw.js').catch(() => {});
-        });
-    }
-})();
+// 0. PWA (ОФЛАЙН РЕЖИМ) - БЕЗ БЛОКУВАННЯ ПАРОЛЕМ
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+    });
+}
 
-console.log("Запуск Дусі v7.1: HUD-інтерфейс, Мобільний Fullscreen Фікс");
+console.log("Запуск Дусі v7.2: HUD-інтерфейс, Без блокування");
 
 // 1. ГЛОБАЛЬНІ ЗМІННІ ТА ЕЛЕМЕНТИ
 const speedElement = document.getElementById('speed-display');
@@ -50,7 +39,7 @@ function toggleFullScreen(enable) {
         if (enable) {
             let requestFS = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
             if (requestFS && !document.fullscreenElement) {
-                requestFS.call(docEl).catch(err => {}); // Ігноруємо помилки блокування браузером
+                requestFS.call(docEl).catch(err => {}); 
             }
         } else {
             let exitFS = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
@@ -59,7 +48,7 @@ function toggleFullScreen(enable) {
             }
         }
     } catch (e) {
-        console.log("Повноекранний режим не підтримується на цьому пристрої.");
+        console.log("Повноекранний режим не підтримується.");
     }
 }
 
@@ -116,13 +105,11 @@ if (saveSettingsBtn) {
             const key = apiKeyInput.value.trim();
             if (key) localStorage.setItem('gemini_api_key', key);
         }
-
         if (aiRadarToggle && window.toggleRadar) {
             if (aiRadarToggle.checked !== window.isRadarActive) {
                 window.toggleRadar(aiRadarToggle.checked);
             }
         }
-
         saveSettingsBtn.innerText = "✅ Збережено!"; 
         setTimeout(() => { 
             if (settingsModal) settingsModal.classList.add('hidden'); 
