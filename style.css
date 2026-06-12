@@ -3,8 +3,18 @@
 body {
     margin: 0; padding: 0; background-color: #000; color: var(--hud-color); 
     font-family: 'Arial', sans-serif; height: 100vh; width: 100vw;
-    overflow: hidden; position: relative; transition: background-color 0.3s;
+    overflow: hidden; position: relative; transition: background-color 0.5s ease;
 }
+
+/* ІНДИКАТОР ІНТЕРНЕТУ */
+#network-indicator {
+    position: absolute; top: 25px; left: 25px; width: 16px; height: 16px; border-radius: 50%;
+    background-color: #FF0000; box-shadow: 0 0 10px #FF0000; z-index: 100;
+    transition: background-color 0.5s, box-shadow 0.5s;
+}
+.net-good { background-color: #00FF00 !important; box-shadow: 0 0 15px #00FF00 !important; }
+.net-weak { background-color: #FFCC00 !important; box-shadow: 0 0 15px #FFCC00 !important; }
+.net-bad  { background-color: #FF0000 !important; box-shadow: 0 0 15px #FF0000 !important; }
 
 #hud-center {
     position: absolute; top: 45%; left: 50%; transform: translate(-50%, -50%);
@@ -12,15 +22,40 @@ body {
     transition: all 0.3s ease; z-index: 5; width: 100%;
 }
 
-#navigation-container { text-align: center; color: var(--hud-color); text-shadow: 0 0 20px var(--hud-color); }
+/* АНІМАЦІЯ КІНЕМАТОГРАФІЧНОГО ПРОЩАННЯ (ЧОРНА ДІРА) */
+.cinema-collapse {
+    animation: collapseToPoint 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards !important;
+}
+@keyframes collapseToPoint {
+    0% { transform: translate(-50%, -50%) scale(1); opacity: 1; filter: blur(0px); }
+    50% { transform: translate(-50%, -50%) scale(0.05); opacity: 1; filter: blur(2px); }
+    100% { transform: translate(-50%, -50%) scale(0); opacity: 0; filter: blur(15px); }
+}
+.blackout { background-color: #000 !important; }
+.blackout #bottom-hud, .blackout #settings-btn, .blackout #network-indicator {
+    transition: opacity 1s; opacity: 0 !important; pointer-events: none;
+}
 
-/* ВЕЛИЧЕЗНІ ЦИФРИ (ВЕРТИКАЛЬНО) */
-#nav-arrow { font-size: 25vw; line-height: 1; margin-bottom: 5px; transition: color 0.3s, text-shadow 0.3s; }
-#nav-distance { font-size: 5vw; font-weight: bold; font-family: monospace; }
+#navigation-container { text-align: center; color: var(--hud-color); }
+
+/* ОБ'ЄМНІ 3D СТРІЛКИ */
+#nav-arrow { 
+    font-size: 28vw; line-height: 1; margin-bottom: 5px; 
+    font-weight: 900; font-family: 'Arial Black', sans-serif;
+    color: var(--hud-color);
+    text-shadow: 
+        0 2px 0 rgba(255,255,255,0.4), 
+        0 4px 0 rgba(150,150,150,0.5), 
+        0 6px 0 rgba(100,100,100,0.6), 
+        0 8px 15px rgba(0,0,0,0.9), 
+        0 0 35px var(--hud-color);
+    transition: color 0.3s ease, text-shadow 0.3s ease, transform 0.3s ease; 
+}
+#nav-distance { font-size: 6vw; font-weight: bold; font-family: monospace; text-shadow: 0 0 20px var(--hud-color); }
 
 #speed-container { text-align: center; color: var(--hud-color); }
 #speed-display {
-    font-size: 38vw; /* Займає 40% ширини екрана на цифру, 3 цифри влізуть ідеально */
+    font-size: 38vw; 
     font-weight: bold; line-height: 0.85; letter-spacing: -2px;
     text-shadow: 0 0 25px var(--hud-color); transition: color 0.3s ease, text-shadow 0.3s ease;
 }
@@ -29,7 +64,7 @@ body {
 /* ГОРИЗОНТАЛЬНИЙ РЕЖИМ (ТЕЛЕФОН НА БОЦІ) */
 @media (orientation: landscape) {
     #hud-center { flex-direction: row; gap: 8vw; top: 50%; }
-    #speed-display { font-size: 60vh; } /* Залежить від висоти екрана */
+    #speed-display { font-size: 60vh; } 
     #nav-arrow { font-size: 45vh; }
     #unit { font-size: 6vh; }
     #nav-distance { font-size: 8vh; }
@@ -52,7 +87,6 @@ body {
 .auto-fade { transition: opacity 0.8s ease-in-out; opacity: 0.6; }
 .auto-fade.faded { opacity: 0 !important; pointer-events: none; }
 
-/* ВИПРАВЛЕНО: додано .hidden до settings-modal, щоб воно не ховалося назавжди */
 #settings-modal.hidden, #map-modal.hidden { display: none !important; }
 
 #settings-modal { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0, 0, 0, 0.9); display: flex; justify-content: center; align-items: center; z-index: 1000; }
