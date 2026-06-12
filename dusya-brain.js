@@ -308,16 +308,16 @@ if (SpeechRecognition) {
             if(window.recognition) window.recognition.stop(); window.speak("Гіпер-двигун активовано.", window.playUFOLoop); return;
         }
 
-        // РОЗУМНА АДРЕСНА КНИГА (НОВИЙ НАВІГАТОР)
-        if (transcript.match(/(маршрут додому|додому|поїхали додому)/i)) {
+        // РОЗУМНА АДРЕСНА КНИГА (НАВІГАТОР)
+        if (transcript.match(/(маршрут додому|додому|дім|дорога додому|веди додому|поїхали додому)/i)) {
             if(window.recognition) window.recognition.stop(); 
             if(window.startSmartNavigation) window.startSmartNavigation("дім");
             return;
         }
-        let smartNavMatch = transcript.match(/(?:маршрут на|поїхали на|маршрут)\s+(роботу|робота\s+\d+|дача|гараж)/i);
+        let smartNavMatch = transcript.match(/(?:маршрут на|поїхали на|маршрут|дорога на)\s+(роботу|робота\s+\d+|дача|гараж|школа|магазин)/i);
         if (smartNavMatch && smartNavMatch[1]) {
             if(window.recognition) window.recognition.stop();
-            if(window.startSmartNavigation) window.startSmartNavigation(smartNavMatch[1]);
+            if(window.startSmartNavigation) window.startSmartNavigation(smartNavMatch[1].trim());
             return;
         }
         let routeMatch = transcript.match(/(?:маршрут до|доїхати до|найближча)\s+(.*)/i);
