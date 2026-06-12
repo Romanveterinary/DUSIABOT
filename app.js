@@ -20,11 +20,11 @@
     }
 })();
 
-console.log("Запуск Дусі v7.0: HUD-інтерфейс, Таймер тиші, Неонове світло");
+console.log("Запуск Дусі v7.1: HUD-інтерфейс, Мобільний Fullscreen Фікс");
 
 // 1. ГЛОБАЛЬНІ ЗМІННІ ТА ЕЛЕМЕНТИ
 const speedElement = document.getElementById('speed-display');
-const statusElement = document.getElementById('status-text'); // Може бути null у новій версії
+const statusElement = document.getElementById('status-text'); 
 const dusyaBtn = document.getElementById('dusya-btn');
 const keepAliveAudio = document.getElementById('keep-alive-audio');
 const dusyaGlow = document.getElementById('dusya-glow');
@@ -41,26 +41,30 @@ window.currentLat = null;
 window.currentLon = null;
 window.isFirstLocationCheck = true;
 
-let inactivityTimer = null; // Таймер для зникнення кнопок
+let inactivityTimer = null; 
 
-// 2. ФУНКЦІЇ ІНТЕРФЕЙСУ (FULLSCREEN ТА FADE)
+// 2. ФУНКЦІЇ ІНТЕРФЕЙСУ (ЗАХИЩЕНИЙ МОБІЛЬНИЙ FULLSCREEN)
 function toggleFullScreen(enable) {
-    if (enable) {
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch(err => {
-                console.log(`Помилка повноекранного режиму: ${err.message}`);
-            });
+    try {
+        let docEl = document.documentElement;
+        if (enable) {
+            let requestFS = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
+            if (requestFS && !document.fullscreenElement) {
+                requestFS.call(docEl).catch(err => {}); // Ігноруємо помилки блокування браузером
+            }
+        } else {
+            let exitFS = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+            if (exitFS && document.fullscreenElement) {
+                exitFS.call(document).catch(err => {});
+            }
         }
-    } else {
-        if (document.exitFullscreen && document.fullscreenElement) {
-            document.exitFullscreen();
-        }
+    } catch (e) {
+        console.log("Повноекранний режим не підтримується на цьому пристрої.");
     }
 }
 
-// Функція для скидання таймера тиші (показує кнопки)
 function resetInactivityTimer() {
-    if (!window.isListening) return; // Працює тільки коли Дуся активна
+    if (!window.isListening) return; 
     
     const fadeElements = document.querySelectorAll('.auto-fade');
     fadeElements.forEach(el => el.classList.remove('faded'));
@@ -68,20 +72,16 @@ function resetInactivityTimer() {
     if (inactivityTimer) clearTimeout(inactivityTimer);
     
     inactivityTimer = setTimeout(() => {
-        // Якщо модальне вікно відкрито - не ховаємо інтерфейс
         const modal = document.getElementById('settings-modal');
         if (modal && !modal.classList.contains('hidden')) return;
-        
         fadeElements.forEach(el => el.classList.add('faded'));
-    }, 10000); // 10 секунд
+    }, 10000); 
 }
 
-// Вішаємо слухача на весь екран: будь-який тап повертає інтерфейс
 document.addEventListener('touchstart', resetInactivityTimer);
 document.addEventListener('mousedown', resetInactivityTimer);
 
-
-// 3. ЛОГІКА НАЛАШТУВАНЬ (ПОЛАГОДЖЕНО)
+// 3. ЛОГІКА НАЛАШТУВАНЬ
 const settingsBtn = document.getElementById('settings-btn');
 const settingsModal = document.getElementById('settings-modal');
 const closeSettingsBtn = document.getElementById('close-settings-btn');
@@ -89,7 +89,6 @@ const saveSettingsBtn = document.getElementById('save-settings-btn');
 const apiKeyInput = document.getElementById('api-key-input');
 const aiRadarToggle = document.getElementById('ai-radar-toggle');
 
-// Відновлення збереженого ключа при завантаженні
 window.addEventListener('DOMContentLoaded', () => {
     try { 
         const savedKey = localStorage.getItem('gemini_api_key'); 
@@ -99,7 +98,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
 if (settingsBtn) {
     settingsBtn.addEventListener('click', (e) => {
-        e.stopPropagation(); // Щоб клік не тригерив таймер тиші на фоні
+        e.stopPropagation(); 
         if (settingsModal) settingsModal.classList.remove('hidden');
     });
 }
@@ -133,7 +132,6 @@ if (saveSettingsBtn) {
     });
 }
 
-
 // 4. ГОЛОВНА КНОПКА ЗАПУСКУ
 if (dusyaBtn) {
     dusyaBtn.addEventListener('click', async (e) => {
@@ -144,16 +142,13 @@ if (dusyaBtn) {
             dusyaBtn.classList.add('active'); 
             dusyaBtn.innerText = "Дуся Активна";
             
-            // Вмикаємо зелене світіння замість тексту
-            if (dusyaGlow) {
-                dusyaGlow.className = 'glow-green';
-            }
-            if (statusElement) statusElement.innerText = "Дуся: Слухаю..."; // Для логів або старих версій
+            if (dusyaGlow) dusyaGlow.className = 'glow-green';
+            if (statusElement) statusElement.innerText = "Дуся: Слухаю..."; 
             
             keepAliveAudio.play().catch(err => {});
             toggleFullScreen(true);
 
-            resetInactivityTimer(); // Запускаємо таймер тиші
+            resetInactivityTimer(); 
 
             try { if ('wakeLock' in navigator) window.wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
             
@@ -187,7 +182,7 @@ if (dusyaBtn) {
             dusyaBtn.classList.remove('active'); 
             dusyaBtn.innerText = "Запустити Дусю";
             
-            if (dusyaGlow) dusyaGlow.className = ''; // Вимикаємо світіння
+            if (dusyaGlow) dusyaGlow.className = ''; 
             if (statusElement) statusElement.innerText = "Вимкнена"; 
             
             if (window.speechSynthesis) window.speechSynthesis.cancel(); 
@@ -213,13 +208,12 @@ if (dusyaBtn) {
             
             toggleFullScreen(false);
             
-            // Повертаємо всі зниклі кнопки
             const fadeElements = document.querySelectorAll('.auto-fade');
             fadeElements.forEach(el => el.classList.remove('faded'));
             if (inactivityTimer) clearTimeout(inactivityTimer);
             
             document.body.style.backgroundColor = "";
-            document.documentElement.style.setProperty('--hud-color', '#FFFFFF'); // Скидаємо колір на білий
+            document.documentElement.style.setProperty('--hud-color', '#FFFFFF');
             if (speedElement) speedElement.style.fontFamily = "";
             const noteOverlay = document.getElementById('note-overlay');
             if(noteOverlay) noteOverlay.style.display = 'none';
