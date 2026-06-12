@@ -26,8 +26,15 @@
         <video id="ai-video" autoplay playsinline muted></video>
         <canvas id="ai-canvas"></canvas>
         <div id="hood-line"><div id="hood-line-text">ЛІНІЯ КАПОТА (Тягни)</div></div>
+        
         <div id="radar-controls">
-            <button id="exit-radar-btn">🛑 ВИЙТИ З РАДАРА</button>
+            <div style="background: rgba(0,0,0,0.7); padding: 10px; border-radius: 10px; margin-bottom: 10px;">
+                <label style="color: #0f0; display: block; font-weight: bold; margin-bottom: 5px;">Чутливість ШІ: <span id="ai-sens-val">60%</span></label>
+                <input type="range" id="ai-sens-slider" min="10" max="90" value="60" style="width: 100%;">
+                <label style="color: #0f0; display: block; font-weight: bold; margin-top: 10px; margin-bottom: 5px;">Калібрування: <span id="ai-focal-val">1.0</span></label>
+                <input type="range" id="ai-focal-slider" min="0.5" max="2.0" step="0.1" value="1.0" style="width: 100%;">
+            </div>
+            <button id="exit-radar-btn" style="width: 100%; padding: 15px; background: #ff4444; color: white; border: none; border-radius: 10px; font-weight: bold; font-size: 18px; cursor: pointer;">🛑 ВИЙТИ З РАДАРА</button>
         </div>
     </div>
 
@@ -81,7 +88,7 @@
                 • <i>"Стоп / Хватить / Зупинись"</i> - скидання екрана<br>
                 • <i>"Приїхали / До побачення / Кінець"</i> - вимкнути Дусю<br>
                 • <i>"Дуся, радар"</i> - увімкнути ШІ-сканер<br>
-                • <i>"Запам'ятай парковку" / "Де машина?"</i><br>
+                • <i>"Запам'ятай парковку" / "Де machine?"</i><br>
                 <br>
                 <b style="color: #0f0;">З ШІ-КЛЮЧЕМ (Gemini AI):</b><br>
                 • <i>"Дуся, [питання]"</i> - розумна відповідь<br>
