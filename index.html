@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Дуся - Автоасистент</title>
+    <title>Дуся - Автоасистент (HUD)</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -18,30 +18,37 @@
 
         <div id="radar-controls">
             <button id="exit-radar-btn">🛑 ВИЙТИ З РАДАРА</button>
-            
             <div class="radar-sliders">
                 <label>Впевненість ШІ: <span id="ai-sens-val">60%</span></label>
                 <input type="range" id="ai-sens-slider" min="30" max="90" step="5" value="60">
-                
                 <label>Калібрування фокусу: <span id="ai-focal-val">1.0</span></label>
                 <input type="range" id="ai-focal-slider" min="0.5" max="3.0" step="0.1" value="1.0">
             </div>
         </div>
     </div>
 
-    <button id="settings-btn" title="Налаштування API">⚙️</button>
+    <button id="settings-btn" class="auto-fade" title="Налаштування API">⚙️</button>
 
-    <div id="speed-container">
-        <div id="speed-display">0</div>
-        <div id="unit">км/год</div>
+    <div id="hud-center">
+        <div id="navigation-container" style="display: none;">
+            <div id="nav-arrow" class="static">⬆️</div>
+            <div id="nav-distance">-- м</div>
+        </div>
+
+        <div id="speed-container">
+            <div id="speed-display">0</div>
+            <div id="unit">км/год</div>
+        </div>
     </div>
-    
-    <div id="status-text">Натисніть кнопку для старту</div>
-    <button id="dusya-btn">Запустити Дусю</button>
+
+    <div id="bottom-hud">
+        <button id="dusya-btn" class="auto-fade">Запустити Дусю</button>
+        <div id="dusya-glow"></div> </div>
 
     <div id="settings-modal" class="hidden">
         <div class="modal-content">
             <h2>Налаштування</h2>
+            
             <p>Введіть ваш ключ Gemini API:</p>
             <input type="password" id="api-key-input" placeholder="Вставте ключ сюди...">
             
@@ -52,7 +59,33 @@
                 <input type="checkbox" id="ai-radar-toggle" style="width: 20px; height: 20px; accent-color: #0cf;">
                 <span style="font-weight: bold;">Увімкнути ШІ-відеосканер</span>
             </label>
-            <div class="modal-buttons">
+
+            <hr style="margin: 15px 0; border-color: #444;">
+
+            <h3 style="margin-top: 0; color: #0f0;">📍 Адресна книга</h3>
+            <p style="font-size: 0.85em; color: #aaa; margin-top: 0;">Збережіть свої улюблені маршрути.</p>
+            <button id="open-map-btn" style="width: 100%; padding: 10px; margin-bottom: 15px; background: #333; color: white; border: 1px solid #0f0; border-radius: 8px;">🗺️ Відкрити мапу точок</button>
+
+            <hr style="margin: 15px 0; border-color: #444;">
+
+            <h3 style="margin-top: 0; color: #ffcc00;">📚 Команди Дусі</h3>
+            <div style="background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px; font-size: 0.85em; max-height: 150px; overflow-y: auto; text-align: left; line-height: 1.4;">
+                <b style="color: #0cf;">БЕЗ ІНТЕРНЕТУ (Бортовий комп'ютер):</b><br>
+                • <i>"Стоп"</i> - вимкнути все<br>
+                • <i>"Колір [назва]"</i> - змінити тему HUD<br>
+                • <i>"Запам'ятай парковку" / "Де машина?"</i><br>
+                • <i>"Запиши замітку" / "Прочитай замітки"</i><br>
+                • <i>"Режим велосипеда" / "Машина часу"</i><br>
+                <br>
+                <b style="color: #0f0;">З ІНТЕРНЕТОМ (Gemini AI):</b><br>
+                • <i>"Дуся, [питання]"</i> - розумна відповідь<br>
+                • <i>"Дуся, додому"</i> - навігація за адресною книгою<br>
+                • <i>"Режим друга"</i> - розумний попутник та Авто-гід<br>
+                • <i>"Режим балабола"</i> - розваги для заторів<br>
+                • <i>"Погода в [місто]"</i><br>
+            </div>
+
+            <div class="modal-buttons" style="margin-top: 20px;">
                 <button id="save-settings-btn">Зберегти</button>
                 <button id="close-settings-btn">Закрити</button>
             </div>
