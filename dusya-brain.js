@@ -108,7 +108,7 @@ window.speak = function(text, onEndCallback = null) {
     }
     
     const dusyaGlow = document.getElementById('dusya-glow');
-    if (dusyaGlow) dusyaGlow.className = ''; // Вимикаємо неонове світло під час розмови
+    if (dusyaGlow) dusyaGlow.className = '';
 
     if ('speechSynthesis' in window) {
         if (window.recognition) { try { window.recognition.stop(); } catch(e){} }
@@ -130,7 +130,7 @@ window.speak = function(text, onEndCallback = null) {
             } else if (window.isListening && !window.isRadarActive && !window.speechSynthesis.speaking && !window.isRecordingNote && !window.isWaitingForCleanupConfirm) {
                 try { 
                     window.recognition.start(); 
-                    if (dusyaGlow) dusyaGlow.className = 'glow-green'; // Повертаємо зелене світло, Дуся знову слухає
+                    if (dusyaGlow) dusyaGlow.className = 'glow-green'; 
                 } catch(e) { }
             }
         };
@@ -217,6 +217,48 @@ if (SpeechRecognition) {
             window.playPing(); 
         }
 
+        // ==========================================
+        // [ДОДАНО] КІНЕМАТОГРАФІЧНЕ ПРОЩАННЯ
+        // ==========================================
+        if (transcript.match(/(приїхали|до побачення|кінець)/i)) {
+            if (window.recognition) window.recognition.stop();
+            window.stopAllSounds();
+            
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' });
+            const timeStr = now.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+            
+            let finalMsg = `Поїздку завершено. Дякую. Сьогодні ${dateStr}, час ${timeStr}.`;
+            
+            // Перевіряємо чи є замітки
+            let notes = localStorage.getItem('dusya_notes');
+            if (notes) {
+                finalMsg += " Увага, у вашому сейфі є збережені замітки.";
+            }
+
+            window.speak(finalMsg, () => {
+                // Анімація чорної діри
+                document.getElementById('hud-center').classList.add('cinema-collapse');
+                document.body.classList.add('blackout');
+                
+                // Звук успіху
+                if(window.playChimeJingle) window.playChimeJingle();
+                
+                // Вимикаємо GPS
+                if (window.locationTimer) clearInterval(window.locationTimer);
+                
+                // Через секунду ховаємо все остаточно
+                setTimeout(() => {
+                    document.getElementById('hud-center').style.display = 'none';
+                    if (dusyaGlow) dusyaGlow.className = ''; 
+                    window.isListening = false;
+                    document.getElementById('dusya-btn').innerText = "Запустити Дусю";
+                }, 1200);
+            });
+            return;
+        }
+        // ==========================================
+
         if (window.isWaitingForCleanupConfirm) {
             if (transcript.includes("так") || transcript.includes("очистити") || transcript.includes("видалити")) {
                 localStorage.removeItem('dusya_notes'); localStorage.removeItem('dusya_parking');
@@ -229,24 +271,40 @@ if (SpeechRecognition) {
             return;
         }
 
-        // АВАРІЙНИЙ СТОП
-        if (transcript.match(/(стоп|завершити|хватить|закрийся|не пизди|тихо|вимкни звук)/i)) {
+        // ==========================================
+        // [ОНОВЛЕНО] АВАРІЙНИЙ СТОП
+        // ==========================================
+        if (transcript.match(/(стоп|завершити|хватить|закрийся|не пизди|тихо|вимкни звук|зупинись)/i)) {
             window.stopAllSounds();
             window.isBikeMode = false;
-            if (window.isRadarActive && window.toggleRadar) { window.toggleRadar(false); const t = document.getElementById('ai-radar-toggle'); if(t) t.checked = false; }
             if (window.noteTimerInterval) { clearInterval(window.noteTimerInterval); window.noteTimerInterval = null; }
             window.speechSynthesis.cancel(); 
-            window.currentMode = "DEFAULT"; window.chatHistory = []; 
             window.isWaitingForCommand = false; window.isRecordingNote = false; window.isTimeMachineActive = false; window.isAutoGuideActive = false;
             
-            document.documentElement.style.setProperty('--hud-color', '#FFFFFF'); // Скидаємо колір на білий
+            document.documentElement.style.setProperty('--hud-color', '#FFFFFF');
             document.body.style.backgroundColor = ""; document.getElementById('note-overlay').style.display = 'none';
             if (dusyaGlow) dusyaGlow.className = 'glow-green'; 
             window.playPing(); 
-            if (window.recognition) { try { window.recognition.stop(); } catch(e){} }
-            window.speak("Зрозуміла. Всі ефекти вимкнено, режим авто-штурмана повернуто.");
+            
+            // Викликаємо нову глобальну функцію
+            if(window.resetToNavigator) window.resetToNavigator();
             return;
         }
+        // ==========================================
+
+        // ==========================================
+        // [ДОДАНО] УВІМКНЕННЯ РАДАРА ГОЛОСОМ
+        // ==========================================
+        if (transcript.match(/(дуся радар|включи радар|активуй радар|режим радар)/i)) {
+            if (window.recognition) window.recognition.stop();
+            if (window.toggleRadar) {
+                window.toggleRadar(true);
+                const t = document.getElementById('ai-radar-toggle');
+                if (t) t.checked = true;
+            }
+            return;
+        }
+        // ==========================================
 
         // РЕЖИМ ДРУГА ТА АВТО-ГІД
         if (transcript.match(/(режим друга|будь другом|переключи на друга|режим друг)/i)) {
@@ -416,7 +474,7 @@ if (SpeechRecognition) {
             }
 
             if (cleanQuery.length > 0) {
-                if (dusyaGlow) dusyaGlow.className = 'glow-yellow'; // Жовтий під час роздумів
+                if (dusyaGlow) dusyaGlow.className = 'glow-yellow'; 
                 if (window.recognition) window.recognition.stop(); 
                 
                 const aiResponse = await window.askDusyaAI(cleanQuery);
@@ -427,7 +485,7 @@ if (SpeechRecognition) {
                     window.waitingTimer = setTimeout(() => { window.isWaitingForCommand = false; }, 10000);
                 }
             } else {
-                if (dusyaGlow) dusyaGlow.className = 'glow-green'; // Зелений, бо продовжує слухати
+                if (dusyaGlow) dusyaGlow.className = 'glow-green'; 
                 window.isWaitingForCommand = true;
                 window.waitingTimer = setTimeout(() => { window.isWaitingForCommand = false; }, 10000); 
                 if (window.recognition) window.recognition.stop(); 
