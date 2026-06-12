@@ -38,9 +38,11 @@ body {
 
 #navigation-container { text-align: center; color: var(--hud-color); }
 
-/* ОБ'ЄМНІ 3D СТРІЛКИ */
+/* ОБ'ЄМНІ 3D СТРІЛКИ - МАКСИМАЛЬНИЙ РОЗМІР */
 #nav-arrow { 
-    font-size: 28vw; line-height: 1; margin-bottom: 5px; 
+    font-size: 45vw; /* Було 28vw */
+    line-height: 0.8; /* Було 1 */
+    margin-bottom: 0px; /* Було 5px */
     font-weight: 900; font-family: 'Arial Black', sans-serif;
     color: var(--hud-color);
     text-shadow: 
@@ -54,18 +56,20 @@ body {
 #nav-distance { font-size: 6vw; font-weight: bold; font-family: monospace; text-shadow: 0 0 20px var(--hud-color); }
 
 #speed-container { text-align: center; color: var(--hud-color); }
+
+/* ВЕЛЕТЕНСЬКІ ЦИФРИ ШВИДКОСТІ */
 #speed-display {
-    font-size: 38vw; 
-    font-weight: bold; line-height: 0.85; letter-spacing: -2px;
+    font-size: 45vw;  /* Було 38vw */
+    font-weight: bold; line-height: 0.8; letter-spacing: -4px;
     text-shadow: 0 0 25px var(--hud-color); transition: color 0.3s ease, text-shadow 0.3s ease;
 }
 #unit { font-size: 4vw; color: #666; }
 
 /* ГОРИЗОНТАЛЬНИЙ РЕЖИМ (ТЕЛЕФОН НА БОЦІ) */
 @media (orientation: landscape) {
-    #hud-center { flex-direction: row; gap: 8vw; top: 50%; }
-    #speed-display { font-size: 60vh; } 
-    #nav-arrow { font-size: 45vh; }
+    #hud-center { flex-direction: row; gap: 5vw; top: 50%; }
+    #speed-display { font-size: 75vh; } 
+    #nav-arrow { font-size: 65vh; }
     #unit { font-size: 6vh; }
     #nav-distance { font-size: 8vh; }
 }
