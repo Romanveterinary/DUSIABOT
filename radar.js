@@ -55,16 +55,25 @@ if (aiFocalSlider) {
 function wakeUpHoodLine() {
     if (!hoodLine || !isRadarActive) return;
     hoodLine.style.opacity = '1';
-    if (radarControls) radarControls.classList.add('visible');
+    
+    // [ОНОВЛЕНО] Пряме керування видимістю повзунків
+    if (radarControls) {
+        radarControls.style.opacity = '1';
+        radarControls.style.pointerEvents = 'auto'; // Дозволяємо натискати
+    }
     
     if (hideLineTimeout) clearTimeout(hideLineTimeout);
     
+    // [ОНОВЛЕНО] Зникнення через 10 секунд
     hideLineTimeout = setTimeout(() => {
         if (!isDraggingLine) {
             hoodLine.style.opacity = '0';
-            if (radarControls) radarControls.classList.remove('visible');
+            if (radarControls) {
+                radarControls.style.opacity = '0';
+                radarControls.style.pointerEvents = 'none'; // Блокуємо натискання невидимих кнопок
+            }
         }
-    }, 5000);
+    }, 10000);
 }
 
 document.addEventListener('touchstart', wakeUpHoodLine);
@@ -121,11 +130,22 @@ window.toggleRadar = async function(turnOn) {
     const radarLayer = document.getElementById('ai-radar-layer');
     const video = document.getElementById('ai-video');
     const statusElement = document.getElementById('status-text');
+    const canvas = document.getElementById('ai-canvas');
     
     if (turnOn) {
         document.body.classList.add('radar-active');
         radarLayer.style.display = 'block';
         
+        // [ДОДАНО] Страховка, щоб контури ШІ ідеально накладалися на відео
+        if (video) {
+            video.style.position = 'absolute'; video.style.top = '0'; video.style.left = '0'; 
+            video.style.width = '100%'; video.style.height = '100%'; video.style.objectFit = 'cover';
+        }
+        if (canvas) {
+            canvas.style.position = 'absolute'; canvas.style.top = '0'; canvas.style.left = '0'; 
+            canvas.style.width = '100%'; canvas.style.height = '100%'; canvas.style.pointerEvents = 'none'; canvas.style.zIndex = '501';
+        }
+
         // ЗУПИНЯЄМО ДУСЮ (Мікрофон спить для економії ресурсів)
         if (window.recognition) { try { window.recognition.stop(); } catch(e){} }
         if(statusElement) statusElement.innerText = "Радар активний (Мікрофон вимкнено)";
@@ -153,7 +173,6 @@ window.toggleRadar = async function(turnOn) {
         if (aiStream) { aiStream.getTracks().forEach(t => t.stop()); aiStream = null; }
         if (video) video.srcObject = null;
         
-        const canvas = document.getElementById('ai-canvas');
         if(canvas) canvas.getContext('2d').clearRect(0,0, canvas.width, canvas.height);
         
         // БУДИМО ДУСЮ (змінні isListening та recognition будуть жити в інших файлах)
