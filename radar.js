@@ -23,17 +23,33 @@ let isDraggingLine = false;
 const TARGET_CLASSES = ['person', 'car', 'truck', 'bus', 'motorcycle', 'bicycle', 'cat', 'dog', 'stop sign'];
 const REAL_HEIGHTS = { 'person': 1.7, 'car': 1.5, 'truck': 3.0, 'bus': 3.0, 'motorcycle': 1.2, 'bicycle': 1.2, 'cat': 0.3, 'dog': 0.5, 'stop sign': 1.0 };
 
-// 1. Управління повзунками радара
-if (aiSensSlider) aiSensSlider.oninput = (e) => {
-    aiSensVal.innerText = e.target.value + "%";
-    aiSens = parseInt(e.target.value);
-    localStorage.setItem('dusya_ai_sens', e.target.value);
-};
-if (aiFocalSlider) aiFocalSlider.oninput = (e) => {
-    aiFocalVal.innerText = e.target.value;
-    aiFocal = parseFloat(e.target.value);
-    localStorage.setItem('dusya_ai_focal', e.target.value);
-};
+// ==========================================
+// [ДОДАНО] 1. Ініціалізація та Управління повзунками радара
+// ==========================================
+window.addEventListener('DOMContentLoaded', () => {
+    // Відновлення збережених значень при старті
+    const savedSens = localStorage.getItem('dusya_ai_sens');
+    if (savedSens && aiSensSlider) { aiSensSlider.value = savedSens; aiSens = parseInt(savedSens); if(aiSensVal) aiSensVal.innerText = savedSens + "%"; }
+    
+    const savedFocal = localStorage.getItem('dusya_ai_focal');
+    if (savedFocal && aiFocalSlider) { aiFocalSlider.value = savedFocal; aiFocal = parseFloat(savedFocal); if(aiFocalVal) aiFocalVal.innerText = savedFocal; }
+});
+
+if (aiSensSlider) {
+    aiSensSlider.addEventListener('input', (e) => {
+        aiSensVal.innerText = e.target.value + "%";
+        aiSens = parseInt(e.target.value);
+        localStorage.setItem('dusya_ai_sens', e.target.value);
+    });
+}
+if (aiFocalSlider) {
+    aiFocalSlider.addEventListener('input', (e) => {
+        aiFocalVal.innerText = e.target.value;
+        aiFocal = parseFloat(e.target.value);
+        localStorage.setItem('dusya_ai_focal', e.target.value);
+    });
+}
+// ==========================================
 
 // 2. Логіка "Лінії капота"
 function wakeUpHoodLine() {
@@ -117,6 +133,10 @@ window.toggleRadar = async function(turnOn) {
         try {
             aiStream = await navigator.mediaDevices.getUserMedia({video: {facingMode: "environment"}});
             video.srcObject = aiStream;
+            
+            // Відновлення лінії капота
+            let hoodYPercent = parseFloat(localStorage.getItem('dusya_hood_y')) || 70;
+            if (hoodLine) hoodLine.style.top = hoodYPercent + '%';
             wakeUpHoodLine();
             
             await loadAILibraries();
@@ -149,6 +169,8 @@ async function detectAI() {
     if (!isRadarActive || !aiModel || !aiStream) return;
     const video = document.getElementById('ai-video');
     const canvas = document.getElementById('ai-canvas');
+    if (!video || !canvas) return; // Захист від помилок, якщо елементи зникли
+    
     const ctx = canvas.getContext('2d');
     
     if (video.readyState === 4) {
