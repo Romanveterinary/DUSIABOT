@@ -1,276 +1,234 @@
-/* Глобальні налаштування екрана */
+/* ========================================= */
+/* ГЛОБАЛЬНІ ЗМІННІ ТА НАЛАШТУВАННЯ          */
+/* ========================================= */
+:root {
+    --hud-color: #FFFFFF; /* Базовий колір інтерфейсу (мінятиметься голосом) */
+}
+
 body {
     margin: 0;
     padding: 0;
     background-color: #000000; 
-    color: #FFFFFF; 
+    color: var(--hud-color); 
     font-family: 'Arial', sans-serif;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
     height: 100vh;
+    width: 100vw;
     overflow: hidden;
+    position: relative; /* Важливо для абсолютного позиціонування HUD */
     transition: background-color 0.3s;
 }
 
-/* === СТИЛІ ШІ-РАДАРА (ПРОЗОРЕ СКЛО) === */
-#ai-radar-layer {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100vw; height: 100vh;
-    z-index: 10; /* Під інтерфейсом, але над фоном */
-    background: #000;
-}
-
-#ai-video, #ai-canvas {
+/* ========================================= */
+/* ЦЕНТРАЛЬНИЙ HUD (СТРІЛКА + ШВИДКІСТЬ)     */
+/* ========================================= */
+#hud-center {
     position: absolute;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    object-fit: cover; /* Щоб камера не розтягувалась криво */
-}
-
-#ai-canvas {
-    z-index: 11; /* Рамки поверх відео */
-}
-
-/* Розумна лінія капота / керма */
-#hood-line {
-    position: absolute;
-    left: 0;
-    width: 100%;
-    height: 3px;
-    background: rgba(241, 196, 15, 0.8); /* Жовтий */
-    box-shadow: 0 0 10px #f1c40f;
-    z-index: 12;
-    top: 70%; /* Початкова висота */
-    opacity: 0; /* Прихована за замовчуванням */
-    transition: opacity 0.4s ease-in-out; 
-}
-
-#hood-line-text {
-    position: absolute;
-    top: -22px;
+    top: 45%; /* Трохи вище центру для ідеального огляду */
     left: 50%;
-    transform: translateX(-50%);
-    color: #f1c40f;
-    font-size: 0.9rem;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    z-index: 5;
+}
+
+/* Навігаційний блок (Над спідометром) */
+#navigation-container {
+    text-align: center;
+    margin-bottom: 10px;
+    color: var(--hud-color);
+    text-shadow: 0 0 20px var(--hud-color);
+}
+
+#nav-arrow {
+    font-size: 14vh; /* Дуже велика стрілка */
+    line-height: 1;
+    margin-bottom: 5px;
+    transition: color 0.3s, text-shadow 0.3s;
+}
+
+#nav-distance {
+    font-size: 4vh;
     font-weight: bold;
     font-family: monospace;
-    text-shadow: 0 0 5px #000;
-    pointer-events: none;
 }
 
-/* НОВИЙ БЛОК: Панель керування радаром (З'являється по тапу) */
-#radar-controls {
-    position: absolute;
-    bottom: 30px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 90%;
-    max-width: 400px;
-    z-index: 15;
-    background: rgba(0, 0, 0, 0.75);
-    padding: 20px;
-    border-radius: 15px;
-    border: 1px solid #444;
-    opacity: 0; /* Приховано за замовчуванням */
-    transition: opacity 0.4s ease-in-out;
-    pointer-events: none; /* Не блокує кліки, коли приховано */
-}
-
-#radar-controls.visible {
-    opacity: 1;
-    pointer-events: auto; /* Вмикаємо кліки при появі */
-}
-
-#exit-radar-btn {
-    width: 100%;
-    background-color: #ff0000;
-    color: white;
-    font-size: 22px;
-    font-weight: bold;
-    padding: 15px;
-    border: 2px solid #cc0000;
-    border-radius: 10px;
-    margin-bottom: 20px;
-    cursor: pointer;
-    box-shadow: 0 0 15px rgba(255, 0, 0, 0.5);
+/* Спідометр */
+#speed-container {
     text-align: center;
+    color: var(--hud-color);
 }
 
-.radar-sliders label {
-    display: block;
-    font-size: 0.85rem;
-    color: #aaa;
-    margin-bottom: 5px;
-    text-align: left;
+#speed-display {
+    font-size: 20vh; /* Велетенські цифри */
+    font-weight: bold;
+    line-height: 0.9;
+    text-shadow: 0 0 25px var(--hud-color);
+    transition: color 0.3s ease, text-shadow 0.3s ease;
 }
 
-.radar-sliders input[type=range] {
-    width: 100%;
-    margin-bottom: 15px;
-    accent-color: #0cf;
-}
-
-/* Режим увімкненого радара (Зміщуємо спідометр) */
-body.radar-active {
-    background-color: transparent; /* Щоб було видно камеру */
-}
-
-body.radar-active #speed-container {
-    position: absolute;
-    top: 20px;
-    right: 70px; /* Зсуваємо від шестерні */
-    margin: 0;
-    text-align: right;
-    z-index: 20;
-}
-
-body.radar-active #speed-display {
-    font-size: 80px; /* Зменшуємо цифри */
-    color: #00FF00;  /* Яскраво-зелений, як ти просив */
-    text-shadow: 0 0 15px #00FF00, 0 0 30px #000; /* Контраст на тлі дороги */
-}
-
-body.radar-active #unit {
-    font-size: 16px;
-    color: #00FF00;
-    text-shadow: 0 0 5px #000;
-}
-
-/* Ховаємо статус і кнопку запуску Дусі, коли активний радар */
-body.radar-active #status-text, 
-body.radar-active #dusya-btn {
-    display: none !important;
+#unit {
+    font-size: 3vh;
+    color: #666;
 }
 
 /* ========================================= */
+/* АНІМАЦІЇ КЛАСИЧНИХ ПОВОРОТНИКІВ           */
+/* ========================================= */
+@keyframes blink-slow {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.15; }
+}
 
-/* Кнопка шестірні */
+@keyframes blink-fast {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.1; }
+}
+
+.blink-slow { animation: blink-slow 1s infinite; }
+.blink-fast { animation: blink-fast 0.4s infinite; }
+.static { animation: none; opacity: 1; }
+
+/* ========================================= */
+/* НИЖНЯ ПАНЕЛЬ: КНОПКА ТА НЕОНОВЕ СВІТІННЯ  */
+/* ========================================= */
+#bottom-hud {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    z-index: 50;
+}
+
+#dusya-btn {
+    background-color: #111;
+    color: #fff;
+    border: 2px solid #444;
+    border-radius: 30px;
+    padding: 15px 40px;
+    font-size: 20px;
+    font-weight: bold;
+    margin-bottom: 25px; /* Відступ від неонової лінії */
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+#dusya-btn.active {
+    background-color: #000;
+    color: #00FF00;
+    border-color: #00FF00;
+    box-shadow: 0 0 15px rgba(0, 255, 0, 0.5);
+}
+
+/* Неонова лінія-індикатор (Схована за замовчуванням) */
+#dusya-glow {
+    width: 100%;
+    height: 8px; /* Товщина світлодіодної стрічки */
+    background: transparent;
+    transition: all 0.4s ease;
+}
+
+/* Класи світіння, які вмикатиме JS */
+.glow-green {
+    background: #00FF00 !important;
+    box-shadow: 0 -15px 40px #00FF00;
+}
+.glow-yellow {
+    background: #FFCC00 !important;
+    box-shadow: 0 -15px 40px #FFCC00;
+}
+
+/* ========================================= */
+/* КНОПКА НАЛАШТУВАНЬ (ШЕСТІРНЯ)             */
+/* ========================================= */
 #settings-btn {
     position: absolute;
     top: 20px;
     right: 20px;
     background: none;
     border: none;
-    font-size: 35px;
+    font-size: 40px;
     cursor: pointer;
-    opacity: 0.5;
-    transition: opacity 0.3s;
     z-index: 100;
-}
-
-#settings-btn:hover {
-    opacity: 1;
-}
-
-/* Блок спідометра (Стандартний) */
-#speed-container {
-    text-align: center;
-    margin-bottom: 30px;
-    transition: all 0.3s ease;
-}
-
-#speed-display {
-    font-size: 180px; 
-    font-weight: bold;
-    line-height: 1;
-    transition: all 0.3s ease;
-}
-
-#unit {
-    font-size: 24px;
-    color: #888888; 
-}
-
-#status-text {
-    font-size: 20px;
-    color: #00FF00; 
-    margin-bottom: 40px;
-    height: 30px;
-    text-align: center;
-    max-width: 90%;
-    border-radius: 10px;
-    padding: 0 10px;
-}
-
-#dusya-btn {
-    background-color: #222222;
-    color: #00FF00;
-    border: 2px solid #00FF00;
-    border-radius: 50px;
-    padding: 18px 45px;
-    font-size: 22px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: all 0.3s;
-}
-
-#dusya-btn.active {
-    background-color: #00FF00;
-    color: #000000;
-    box-shadow: 0 0 20px #00FF00; 
+    color: #fff;
 }
 
 /* ========================================= */
-/* СТИЛІ МОДАЛЬНОГО ВІКНА НАЛАШТУВАНЬ        */
+/* НІНДЗЯ-КЛАСИ (ДЛЯ ТАЙМЕРА ЗНИКНЕННЯ)      */
+/* ========================================= */
+.auto-fade {
+    transition: opacity 0.8s ease-in-out;
+    opacity: 0.6; /* Напівпрозорі у спокої */
+}
+
+.auto-fade.faded {
+    opacity: 0 !important;
+    pointer-events: none; /* Забороняє випадкові кліки по невидимих кнопках */
+}
+
+/* ========================================= */
+/* СТИЛІ МОДАЛЬНОГО ВІКНА ТА МАПИ            */
 /* ========================================= */
 #settings-modal {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background-color: rgba(0, 0, 0, 0.85); /* Затемнення фону */
-    display: flex;
-    justify-content: center;
-    align-items: center;
+    top: 0; left: 0; width: 100vw; height: 100vh;
+    background-color: rgba(0, 0, 0, 0.9);
+    display: flex; justify-content: center; align-items: center;
     z-index: 1000;
 }
 
-#settings-modal.hidden {
-    display: none;
-}
+#settings-modal.hidden { display: none; }
 
 .modal-content {
     background-color: #1a1a1a;
-    padding: 30px;
+    padding: 25px;
     border-radius: 15px;
     border: 2px solid #00FF00;
     text-align: center;
-    width: 80%;
+    width: 85%;
     max-width: 400px;
+    color: white;
 }
 
 #api-key-input {
-    width: 90%;
-    padding: 12px;
-    margin: 20px 0;
-    font-size: 16px;
-    border-radius: 8px;
-    border: 1px solid #555;
-    background-color: #333;
-    color: white;
-    box-sizing: border-box;
+    width: 100%; padding: 12px; margin: 10px 0;
+    border-radius: 8px; border: 1px solid #555;
+    background-color: #333; color: white; box-sizing: border-box;
 }
 
 .modal-buttons button {
-    padding: 10px 20px;
-    margin: 5px;
-    font-size: 16px;
-    border-radius: 8px;
-    cursor: pointer;
-    border: none;
-    font-weight: bold;
+    padding: 10px 20px; margin: 5px; font-size: 16px;
+    border-radius: 8px; cursor: pointer; border: none; font-weight: bold;
 }
+#save-settings-btn { background-color: #00FF00; color: black; }
+#close-settings-btn { background-color: #555; color: white; }
 
-#save-settings-btn {
-    background-color: #00FF00;
-    color: black;
+/* ========================================= */
+/* СТИЛІ ШІ-РАДАРА                           */
+/* ========================================= */
+#ai-radar-layer {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    z-index: 1; background: #000;
 }
+#ai-video, #ai-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+#ai-canvas { z-index: 2; }
+#hood-line { position: absolute; left: 0; width: 100%; height: 3px; background: rgba(241, 196, 15, 0.8); box-shadow: 0 0 10px #f1c40f; z-index: 3; top: 70%; opacity: 0; transition: opacity 0.4s ease-in-out; }
+#hood-line-text { position: absolute; top: -22px; left: 50%; transform: translateX(-50%); color: #f1c40f; font-size: 0.9rem; font-weight: bold; text-shadow: 0 0 5px #000; pointer-events: none; }
+#radar-controls { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 400px; z-index: 15; background: rgba(0, 0, 0, 0.75); padding: 20px; border-radius: 15px; border: 1px solid #444; opacity: 0; transition: opacity 0.4s ease-in-out; pointer-events: none; }
+#radar-controls.visible { opacity: 1; pointer-events: auto; }
+#exit-radar-btn { width: 100%; background-color: #ff0000; color: white; font-size: 22px; font-weight: bold; padding: 15px; border: 2px solid #cc0000; border-radius: 10px; margin-bottom: 20px; cursor: pointer; }
+.radar-sliders label { display: block; font-size: 0.85rem; color: #aaa; margin-bottom: 5px; text-align: left; }
+.radar-sliders input[type=range] { width: 100%; margin-bottom: 15px; accent-color: #0cf; }
 
-#close-settings-btn {
-    background-color: #555;
-    color: white;
-}
+/* Режим увімкненого радара (Зміщуємо HUD) */
+body.radar-active { background-color: transparent; }
+body.radar-active #hud-center { top: 20px; right: 20px; left: auto; transform: none; align-items: flex-end; }
+body.radar-active #speed-display { font-size: 70px; text-shadow: 0 0 15px var(--hud-color), 0 0 30px #000; }
+body.radar-active #nav-arrow { font-size: 60px; }
+body.radar-active #nav-distance { font-size: 20px; text-shadow: 0 0 5px #000; }
+body.radar-active #dusya-glow, body.radar-active #dusya-btn { display: none !important; }
