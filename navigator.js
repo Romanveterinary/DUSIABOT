@@ -102,6 +102,9 @@ function getDistance(lat1, lon1, lat2, lon2) {
     return Math.round(R * c); 
 }
 
+// ==========================================
+// [ОНОВЛЕНО] ВЕКТОРНІ 3D СТРІЛКИ
+// ==========================================
 function updateHUD(maneuver, distance) {
     const navContainer = document.getElementById('navigation-container');
     const navArrow = document.getElementById('nav-arrow');
@@ -112,18 +115,21 @@ function updateHUD(maneuver, distance) {
     if (distance > 1000) navDistance.innerText = (distance / 1000).toFixed(1) + ' км';
     else navDistance.innerText = distance + ' м';
 
-    let arrowSymbol = '⬆️';
+    // Використовуємо HTML-сутності замість емодзі, щоб вони приймали колір і тіні
+    let arrowSymbol = '&#8679;'; // ⬆ Прямо (векторний символ)
     let type = maneuver.type; let modifier = maneuver.modifier;
-    if (type === 'roundabout') arrowSymbol = '🔄';
-    else if (modifier === 'right' || modifier === 'sharp right') arrowSymbol = '➡️';
-    else if (modifier === 'slight right') arrowSymbol = '↗️';
-    else if (modifier === 'left' || modifier === 'sharp left') arrowSymbol = '⬅️';
-    else if (modifier === 'slight left') arrowSymbol = '↖️';
-    else if (modifier === 'uturn') arrowSymbol = '↩️';
+    
+    if (type === 'roundabout') arrowSymbol = '&#8635;'; // 🔄 Кільце
+    else if (modifier === 'right' || modifier === 'sharp right') arrowSymbol = '&#8680;'; // ➡ Праворуч
+    else if (modifier === 'slight right') arrowSymbol = '&#8599;'; // ↗ Ледь праворуч
+    else if (modifier === 'left' || modifier === 'sharp left') arrowSymbol = '&#8678;'; // ⬅ Ліворуч
+    else if (modifier === 'slight left') arrowSymbol = '&#8598;'; // ↖ Ледь ліворуч
+    else if (modifier === 'uturn') arrowSymbol = '&#8617;'; // ↩ Розворот
 
-    navArrow.innerText = arrowSymbol;
+    navArrow.innerHTML = arrowSymbol; // innerHTML замість innerText для обробки коду символу
     navArrow.className = ''; 
-    if (arrowSymbol === '⬆️') navArrow.classList.add('static'); 
+    
+    if (arrowSymbol === '&#8679;') navArrow.classList.add('static'); 
     else {
         if (distance > 500) navArrow.classList.add('static');
         else if (distance > 200) navArrow.classList.add('blink-slow');
@@ -131,6 +137,7 @@ function updateHUD(maneuver, distance) {
         else navArrow.classList.add('static'); 
     }
 }
+// ==========================================
 
 // --- 3. ЦИКЛ НАВІГАЦІЇ ТА ПРОКЛАДАННЯ МАРШРУТУ ---
 window.processNavigation = function() {
