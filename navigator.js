@@ -34,11 +34,9 @@ function updateHUD(maneuver, distance) {
     if (!navContainer || !navArrow || !navDistance) return;
     navContainer.style.display = 'block';
 
-    // Форматування дистанції
     if (distance > 1000) navDistance.innerText = (distance / 1000).toFixed(1) + ' км';
     else navDistance.innerText = distance + ' м';
 
-    // Вибір іконки стрілки
     let arrowSymbol = '⬆️';
     let type = maneuver.type;
     let modifier = maneuver.modifier;
@@ -52,19 +50,18 @@ function updateHUD(maneuver, distance) {
 
     navArrow.innerText = arrowSymbol;
 
-    // Динамічне блимання (Поворотник)
-    navArrow.className = ''; // Очищаємо класи
+    navArrow.className = ''; 
     if (arrowSymbol === '⬆️') {
-        navArrow.classList.add('static'); // Прямо ніколи не блимає
+        navArrow.classList.add('static'); 
     } else {
         if (distance > 500) navArrow.classList.add('static');
         else if (distance > 200) navArrow.classList.add('blink-slow');
         else if (distance > 20) navArrow.classList.add('blink-fast');
-        else navArrow.classList.add('static'); // Горить постійно перед самим поворотом
+        else navArrow.classList.add('static'); 
     }
 }
 
-// --- 4. ОСНОВНИЙ ЦИКЛ НАВІГАЦІЇ (Оновлюється щосекунди) ---
+// --- 4. ОСНОВНИЙ ЦИКЛ НАВІГАЦІЇ ---
 window.processNavigation = function() {
     if (!window.isSmartNavActive || window.currentRouteSteps.length === 0) return;
     if (!window.currentLat || !window.currentLon) return;
@@ -72,7 +69,6 @@ window.processNavigation = function() {
     let step = window.currentRouteSteps[window.currentStepIndex];
     let distToStep = getDistance(window.currentLat, window.currentLon, step.maneuver.location[1], step.maneuver.location[0]);
 
-    // Якщо під'їхали до маневру ближче ніж на 20 метрів - переходимо до наступного
     if (distToStep <= 20) {
         window.currentStepIndex++;
         if (window.currentStepIndex >= window.currentRouteSteps.length) {
@@ -85,7 +81,6 @@ window.processNavigation = function() {
         step = window.currentRouteSteps[window.currentStepIndex];
         distToStep = getDistance(window.currentLat, window.currentLon, step.maneuver.location[1], step.maneuver.location[0]);
         
-        // Озвучуємо новий маневр
         if (window.speak && step.maneuver.modifier) {
             let action = "поверніть";
             if (step.maneuver.modifier.includes('right')) action = "тримайся правіше або поверни праворуч";
@@ -93,14 +88,7 @@ window.processNavigation = function() {
             window.speak(`Далі ${action}`);
         }
     }
-
     updateHUD(step.maneuver, distToStep);
-
-    // Контроль "Коридору": якщо відхилилися більше ніж на 100м від точки повороту і віддаляємось - перебудова
-    // (Спрощена логіка для легковагового скрипта)
-    if (distToStep > 1500) { 
-        // Тут в майбутньому можна додати авто-перебудову (Rerouting)
-    }
 };
 
 // --- 5. ПРОКЛАДАННЯ МАРШРУТУ (OSRM API) ---
@@ -109,7 +97,7 @@ window.startSmartNavigation = async function(targetName) {
     let target = book[targetName.toLowerCase()];
     
     if (!target) {
-        if (window.speak) window.speak(`Я не знаю координати для точки ${targetName}. Будь ласка, збережіть її на мапі.`);
+        if (window.speak) window.speak(`Я не знаю координати для точки ${targetName}.`);
         return;
     }
     if (!window.currentLat || !window.currentLon) {
@@ -120,7 +108,6 @@ window.startSmartNavigation = async function(targetName) {
     if (window.speak) window.speak(`Будую маршрут до точки ${targetName}.`);
     
     try {
-        // OSRM API приймає координати у форматі lon,lat
         let url = `https://router.project-osrm.org/route/v1/driving/${window.currentLon},${window.currentLat};${target.lon},${target.lat}?steps=true&geometries=geojson&overview=false`;
         let res = await fetch(url);
         let data = await res.json();
@@ -131,7 +118,7 @@ window.startSmartNavigation = async function(targetName) {
             window.isSmartNavActive = true;
             
             if (window.navigationInterval) clearInterval(window.navigationInterval);
-            window.navigationInterval = setInterval(window.processNavigation, 1000); // Оновлюємо стрілки кожну секунду
+            window.navigationInterval = setInterval(window.processNavigation, 1000); 
             
             if (window.speak) window.speak("Маршрут побудовано. Рушаємо!");
         }
@@ -166,7 +153,7 @@ window.findCar = function() {
     }
 };
 
-// Перевірка зон швидкості, Авто-гід (з попередньої версії)
+// --- 7. ПЕРЕВІРКА ЛОКАЦІЇ ТА ШВИДКОСТІ (ВІДНОВЛЕНО ПРИВІТАННЯ) ---
 window.checkLocationAndZone = async function() {
     if (!window.currentLat || !window.currentLon) return;
     try {
@@ -179,7 +166,13 @@ window.checkLocationAndZone = async function() {
             if (place) window.currentPlaceName = place;
 
             if (window.isFirstLocationCheck) {
-                window.isFirstLocationCheck = false; window.isInCityZone = isCurrentlyInCity;
+                window.isFirstLocationCheck = false; 
+                window.isInCityZone = isCurrentlyInCity;
+                
+                let speedLimit = isCurrentlyInCity ? 50 : 90;
+                if (window.speak) {
+                    window.speak(`Системи активовано. Пристебніть пасок безпеки. Ми знаходимось в районі ${place || "невідомо"}. Дозволена швидкість ${speedLimit} кілометрів на годину.`);
+                }
                 return;
             }
 
