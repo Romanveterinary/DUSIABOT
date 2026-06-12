@@ -2,13 +2,27 @@
 // ГОЛОВНИЙ ДИСПЕТЧЕР (app.js)
 // ==========================================
 
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch(() => {});
-    });
-}
+// 0. ПАРОЛЬ НА ВХІД ТА PWA
+(function() {
+    const isAuth = localStorage.getItem('dusya_auth');
+    if (isAuth !== '2811') {
+        let pass = prompt("Введіть пароль для доступу до Дусі:");
+        if (pass === "2811") { 
+            localStorage.setItem('dusya_auth', '2811'); 
+        } else {
+            document.body.innerHTML = "<h2 style='color:red; text-align:center; padding-top:20vh; font-family:sans-serif;'>Доступ заборонено. Оновіть сторінку.</h2>";
+            throw new Error("Зупинка скрипта: невірний пароль.");
+        }
+    }
+    
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js').catch(() => {});
+        });
+    }
+})();
 
-console.log("Запуск Дусі v7.4: Розумна адресна кнопка та Привітання");
+console.log("Запуск Дусі v7.5: Пароль повернуто, Розумний пошук адрес");
 
 // 1. ГЛОБАЛЬНІ ЗМІННІ ТА ЕЛЕМЕНТИ
 const speedElement = document.getElementById('speed-display');
@@ -76,7 +90,7 @@ const closeSettingsBtn = document.getElementById('close-settings-btn');
 const saveSettingsBtn = document.getElementById('save-settings-btn');
 const apiKeyInput = document.getElementById('api-key-input');
 const radarToggleCheckbox = document.getElementById('ai-radar-toggle');
-const openMapBtn = document.getElementById('open-map-btn'); // КНОПКА МАПИ
+const openMapBtn = document.getElementById('open-map-btn');
 
 window.addEventListener('DOMContentLoaded', () => {
     try { 
@@ -99,18 +113,35 @@ if (closeSettingsBtn) {
     });
 }
 
-// ЛОГІКА КНОПКИ "Відкрити мапу точок"
+// РОЗУМНА АДРЕСНА КНИГА (ПОШУК ЗА НАЗВОЮ АБО АДРЕСОЮ)
 if (openMapBtn) {
-    openMapBtn.addEventListener('click', (e) => {
+    openMapBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
-        if (!window.currentLat || !window.currentLon) {
-            alert("GPS ще не знайдено. Увімкніть Дусю, зачекайте 2 секунди і спробуйте знову.");
-            return;
-        }
-        let placeName = prompt("📍 ЗБЕРЕЖЕННЯ ТОЧКИ:\nВведіть назву для вашого поточного місця (наприклад: дім, робота, дача):");
-        if (placeName && placeName.trim() !== "") {
-            if (window.saveAddress) window.saveAddress(placeName.trim(), window.currentLat, window.currentLon);
-            alert(`✅ Точку "${placeName}" успішно збережено!\nТепер ви можете просто сказати: "Дуся, маршрут на ${placeName}".`);
+        
+        let address = prompt("📍 ПОШУК ТОЧКИ:\nВведіть адресу або назву місця\n(наприклад: Київ, Хрещатик 1  або  Епіцентр Хмельницький):");
+        if (!address || address.trim() === "") return;
+        
+        try {
+            // Шукаємо координати через безкоштовний API OpenStreetMap
+            let res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1&accept-language=uk`);
+            let data = await res.json();
+            
+            if (data && data.length > 0) {
+                let lat = data[0].lat;
+                let lon = data[0].lon;
+                let displayName = data[0].display_name.split(',').slice(0, 2).join(','); // Беремо лише початок довгої адреси
+                
+                let placeName = prompt(`✅ Знайдено:\n${displayName}\n\nВведіть коротку назву для голосової команди\n(наприклад: дім, робота, гараж):`);
+                
+                if (placeName && placeName.trim() !== "") {
+                    if (window.saveAddress) window.saveAddress(placeName.trim(), lat, lon);
+                    alert(`Готово! Точку "${placeName}" збережено.\nТепер просто скажіть: "Дуся, маршрут на ${placeName}".`);
+                }
+            } else {
+                alert("❌ На жаль, не вдалося знайти таку адресу. Спробуйте написати по-іншому (Додайте назву міста).");
+            }
+        } catch (err) {
+            alert("Помилка з'єднання з сервером пошуку.");
         }
     });
 }
