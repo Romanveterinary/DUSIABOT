@@ -87,8 +87,15 @@ window.resetToNavigator = function() {
     }
     // 2. Скидаємо балабола/друга до стандарту
     window.currentMode = "DEFAULT";
-    // 3. Ховаємо навігаційні стрілки
+    
+    // 3. Ховаємо навігаційні стрілки ТА ПОВНІСТЮ ЗУПИНЯЄМО МАРШРУТ
     document.getElementById('navigation-container').style.display = 'none';
+    window.isSmartNavActive = false;
+    if (window.navigationInterval) {
+        clearInterval(window.navigationInterval);
+        window.navigationInterval = null;
+    }
+    
     if(window.recognition && window.speak) window.speak("Режим штурмана активовано.");
 };
 
