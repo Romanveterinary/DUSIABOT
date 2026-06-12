@@ -20,13 +20,14 @@
     }
 })();
 
-console.log("Запуск Дусі v6.0: Модульна архітектура, Fullscreen, Режим Друг");
+console.log("Запуск Дусі v7.0: HUD-інтерфейс, Таймер тиші, Неонове світло");
 
 // 1. ГЛОБАЛЬНІ ЗМІННІ ТА ЕЛЕМЕНТИ
 const speedElement = document.getElementById('speed-display');
-const statusElement = document.getElementById('status-text');
+const statusElement = document.getElementById('status-text'); // Може бути null у новій версії
 const dusyaBtn = document.getElementById('dusya-btn');
 const keepAliveAudio = document.getElementById('keep-alive-audio');
+const dusyaGlow = document.getElementById('dusya-glow');
 
 window.isListening = false;
 window.said70 = false;
@@ -40,7 +41,9 @@ window.currentLat = null;
 window.currentLon = null;
 window.isFirstLocationCheck = true;
 
-// 2. ПОВНОЕКРАННИЙ РЕЖИМ (ФУНКЦІЯ)
+let inactivityTimer = null; // Таймер для зникнення кнопок
+
+// 2. ФУНКЦІЇ ІНТЕРФЕЙСУ (FULLSCREEN ТА FADE)
 function toggleFullScreen(enable) {
     if (enable) {
         if (!document.fullscreenElement) {
@@ -55,88 +58,179 @@ function toggleFullScreen(enable) {
     }
 }
 
-// 3. ГОЛОВНА КНОПКА ЗАПУСКУ
-dusyaBtn.addEventListener('click', async () => {
-    if (!window.isListening) {
-        window.isListening = true; 
-        dusyaBtn.classList.add('active'); 
-        dusyaBtn.innerText = "Дуся Активна";
-        dusyaBtn.style.backgroundColor = "#00FF00"; 
-        statusElement.innerText = "Дуся: Слухаю..."; 
+// Функція для скидання таймера тиші (показує кнопки)
+function resetInactivityTimer() {
+    if (!window.isListening) return; // Працює тільки коли Дуся активна
+    
+    const fadeElements = document.querySelectorAll('.auto-fade');
+    fadeElements.forEach(el => el.classList.remove('faded'));
+    
+    if (inactivityTimer) clearTimeout(inactivityTimer);
+    
+    inactivityTimer = setTimeout(() => {
+        // Якщо модальне вікно відкрито - не ховаємо інтерфейс
+        const modal = document.getElementById('settings-modal');
+        if (modal && !modal.classList.contains('hidden')) return;
         
-        keepAliveAudio.play().catch(e => {});
-        toggleFullScreen(true); // Ховаємо шапку браузера!
+        fadeElements.forEach(el => el.classList.add('faded'));
+    }, 10000); // 10 секунд
+}
 
-        try { if ('wakeLock' in navigator) window.wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
-        
-        window.isFirstLocationCheck = true; 
-        window.jamStartTime = 0; 
-        window.isJamZenActive = false;
-        
-        if (window.locationTimer) clearInterval(window.locationTimer);
-        if (window.checkLocationAndZone) {
-            window.locationTimer = setInterval(window.checkLocationAndZone, 60000); 
-            setTimeout(window.checkLocationAndZone, 1500);
-        }
+// Вішаємо слухача на весь екран: будь-який тап повертає інтерфейс
+document.addEventListener('touchstart', resetInactivityTimer);
+document.addEventListener('mousedown', resetInactivityTimer);
 
-        let lastCleanup = localStorage.getItem('dusya_last_cleanup');
-        let nowTime = Date.now();
-        if (!lastCleanup) { localStorage.setItem('dusya_last_cleanup', nowTime); } 
-        else if (nowTime - parseInt(lastCleanup) > 30 * 24 * 60 * 60 * 1000) {
-            window.isWaitingForCleanupConfirm = true;
-            if (window.recognition) window.recognition.stop();
-            setTimeout(() => { 
-                if (window.speak) window.speak("Минув місяць. Бажаєте очистити сейф заміток та парковку? Скажіть Так або Ні."); 
-            }, 1000);
-        }
-        
-        if (window.recognition && !window.isRadarActive) {
-            try { window.recognition.start(); } catch(e){}
-        }
 
-    } else {
-        window.isListening = false; 
-        dusyaBtn.classList.remove('active'); 
-        dusyaBtn.innerText = "Запустити Дусю";
-        dusyaBtn.style.backgroundColor = ""; 
-        statusElement.innerText = "Вимкнена"; 
-        
-        if (window.speechSynthesis) window.speechSynthesis.cancel(); 
-        if (window.stopAllSounds) window.stopAllSounds();
-        
-        if (window.isRadarActive && window.toggleRadar) { 
-            window.toggleRadar(false); 
-            const toggleBtn = document.getElementById('ai-radar-toggle');
-            if(toggleBtn) toggleBtn.checked = false; 
-        }
-        
-        if (window.noteTimerInterval) { clearInterval(window.noteTimerInterval); window.noteTimerInterval = null; }
-        if (window.recognition) window.recognition.stop(); 
-        keepAliveAudio.pause();
-        
-        window.currentMode = "DEFAULT"; 
-        window.chatHistory = []; 
-        window.isWaitingForCommand = false; 
-        window.isAutoGuideActive = false;
-        window.isTimeMachineActive = false; 
-        window.isRecordingNote = false; 
-        window.isWaitingForCleanupConfirm = false; 
-        window.isBikeMode = false; 
-        
-        toggleFullScreen(false); // Виходимо з повноекранного
-        
-        document.body.style.backgroundColor = "";
-        speedElement.style.color = "white";
-        speedElement.style.fontFamily = "";
-        speedElement.style.textShadow = "none";
-        document.getElementById('note-overlay').style.display = 'none';
-        
-        if (window.locationTimer) { clearInterval(window.locationTimer); window.locationTimer = null; }
-        if (window.wakeLock !== null) { window.wakeLock.release(); window.wakeLock = null; }
-    }
+// 3. ЛОГІКА НАЛАШТУВАНЬ (ПОЛАГОДЖЕНО)
+const settingsBtn = document.getElementById('settings-btn');
+const settingsModal = document.getElementById('settings-modal');
+const closeSettingsBtn = document.getElementById('close-settings-btn');
+const saveSettingsBtn = document.getElementById('save-settings-btn');
+const apiKeyInput = document.getElementById('api-key-input');
+const aiRadarToggle = document.getElementById('ai-radar-toggle');
+
+// Відновлення збереженого ключа при завантаженні
+window.addEventListener('DOMContentLoaded', () => {
+    try { 
+        const savedKey = localStorage.getItem('gemini_api_key'); 
+        if (savedKey && apiKeyInput) apiKeyInput.value = savedKey; 
+    } catch (e) { }
 });
 
-// 4. GPS ТРЕКІНГ ТА РЕАКЦІЯ НА ШВИДКІСТЬ
+if (settingsBtn) {
+    settingsBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // Щоб клік не тригерив таймер тиші на фоні
+        if (settingsModal) settingsModal.classList.remove('hidden');
+    });
+}
+
+if (closeSettingsBtn) {
+    closeSettingsBtn.addEventListener('click', () => {
+        if (settingsModal) settingsModal.classList.add('hidden');
+        resetInactivityTimer();
+    });
+}
+
+if (saveSettingsBtn) {
+    saveSettingsBtn.addEventListener('click', () => {
+        if (apiKeyInput) {
+            const key = apiKeyInput.value.trim();
+            if (key) localStorage.setItem('gemini_api_key', key);
+        }
+
+        if (aiRadarToggle && window.toggleRadar) {
+            if (aiRadarToggle.checked !== window.isRadarActive) {
+                window.toggleRadar(aiRadarToggle.checked);
+            }
+        }
+
+        saveSettingsBtn.innerText = "✅ Збережено!"; 
+        setTimeout(() => { 
+            if (settingsModal) settingsModal.classList.add('hidden'); 
+            saveSettingsBtn.innerText = "Зберегти"; 
+            resetInactivityTimer();
+        }, 1000);
+    });
+}
+
+
+// 4. ГОЛОВНА КНОПКА ЗАПУСКУ
+if (dusyaBtn) {
+    dusyaBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        
+        if (!window.isListening) {
+            window.isListening = true; 
+            dusyaBtn.classList.add('active'); 
+            dusyaBtn.innerText = "Дуся Активна";
+            
+            // Вмикаємо зелене світіння замість тексту
+            if (dusyaGlow) {
+                dusyaGlow.className = 'glow-green';
+            }
+            if (statusElement) statusElement.innerText = "Дуся: Слухаю..."; // Для логів або старих версій
+            
+            keepAliveAudio.play().catch(err => {});
+            toggleFullScreen(true);
+
+            resetInactivityTimer(); // Запускаємо таймер тиші
+
+            try { if ('wakeLock' in navigator) window.wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
+            
+            window.isFirstLocationCheck = true; 
+            window.jamStartTime = 0; 
+            window.isJamZenActive = false;
+            
+            if (window.locationTimer) clearInterval(window.locationTimer);
+            if (window.checkLocationAndZone) {
+                window.locationTimer = setInterval(window.checkLocationAndZone, 60000); 
+                setTimeout(window.checkLocationAndZone, 1500);
+            }
+
+            let lastCleanup = localStorage.getItem('dusya_last_cleanup');
+            let nowTime = Date.now();
+            if (!lastCleanup) { localStorage.setItem('dusya_last_cleanup', nowTime); } 
+            else if (nowTime - parseInt(lastCleanup) > 30 * 24 * 60 * 60 * 1000) {
+                window.isWaitingForCleanupConfirm = true;
+                if (window.recognition) window.recognition.stop();
+                setTimeout(() => { 
+                    if (window.speak) window.speak("Минув місяць. Бажаєте очистити сейф заміток та парковку? Скажіть Так або Ні."); 
+                }, 1000);
+            }
+            
+            if (window.recognition && !window.isRadarActive) {
+                try { window.recognition.start(); } catch(err){}
+            }
+
+        } else {
+            window.isListening = false; 
+            dusyaBtn.classList.remove('active'); 
+            dusyaBtn.innerText = "Запустити Дусю";
+            
+            if (dusyaGlow) dusyaGlow.className = ''; // Вимикаємо світіння
+            if (statusElement) statusElement.innerText = "Вимкнена"; 
+            
+            if (window.speechSynthesis) window.speechSynthesis.cancel(); 
+            if (window.stopAllSounds) window.stopAllSounds();
+            
+            if (window.isRadarActive && window.toggleRadar) { 
+                window.toggleRadar(false); 
+                if(aiRadarToggle) aiRadarToggle.checked = false; 
+            }
+            
+            if (window.noteTimerInterval) { clearInterval(window.noteTimerInterval); window.noteTimerInterval = null; }
+            if (window.recognition) window.recognition.stop(); 
+            keepAliveAudio.pause();
+            
+            window.currentMode = "DEFAULT"; 
+            window.chatHistory = []; 
+            window.isWaitingForCommand = false; 
+            window.isAutoGuideActive = false;
+            window.isTimeMachineActive = false; 
+            window.isRecordingNote = false; 
+            window.isWaitingForCleanupConfirm = false; 
+            window.isBikeMode = false; 
+            
+            toggleFullScreen(false);
+            
+            // Повертаємо всі зниклі кнопки
+            const fadeElements = document.querySelectorAll('.auto-fade');
+            fadeElements.forEach(el => el.classList.remove('faded'));
+            if (inactivityTimer) clearTimeout(inactivityTimer);
+            
+            document.body.style.backgroundColor = "";
+            document.documentElement.style.setProperty('--hud-color', '#FFFFFF'); // Скидаємо колір на білий
+            if (speedElement) speedElement.style.fontFamily = "";
+            const noteOverlay = document.getElementById('note-overlay');
+            if(noteOverlay) noteOverlay.style.display = 'none';
+            
+            if (window.locationTimer) { clearInterval(window.locationTimer); window.locationTimer = null; }
+            if (window.wakeLock !== null) { window.wakeLock.release(); window.wakeLock = null; }
+        }
+    });
+}
+
+// 5. GPS ТРЕКІНГ ТА РЕАКЦІЯ НА ШВИДКІСТЬ
 if (navigator.geolocation) {
     navigator.geolocation.watchPosition(
         function(position) {
@@ -151,7 +245,7 @@ if (navigator.geolocation) {
                     if(window.playPing) window.playPing(); 
                     if(window.speak) window.speak("90 кілометрів на годину! Стрибок у часі!");
                 }
-                speedElement.innerText = speedKmh; 
+                if(speedElement) speedElement.innerText = speedKmh; 
                 window.gpsSpeed = speedKmh; 
             }
 
