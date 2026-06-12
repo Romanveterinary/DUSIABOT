@@ -212,181 +212,32 @@ if (SpeechRecognition) {
 
         const dusyaGlow = document.getElementById('dusya-glow');
 
-        if (transcript.includes("дуся") || window.isWaitingForCommand) { 
+        // ==========================================
+        // 1. ПЕРЕВІРКА: ЧИ ДО ДУСІ ЗВЕРТАЮТЬСЯ?
+        // ==========================================
+        let isAddressed = transcript.includes("дуся") || window.isWaitingForCommand;
+
+        // Блимкаємо жовтим і пікаємо ТІЛЬКИ якщо водій щойно сказав "Дуся"
+        if (transcript.includes("дуся") && !window.isWaitingForCommand) { 
             if (dusyaGlow) dusyaGlow.className = 'glow-yellow'; 
             window.playPing(); 
         }
 
         // ==========================================
-        // [ДОДАНО] КІНЕМАТОГРАФІЧНЕ ПРОЩАННЯ
+        // 2. ВИНЯТКИ ДЛЯ ДІАЛОГІВ (Ігнорують щит isAddressed)
         // ==========================================
-        if (transcript.match(/(дуся приїхали|дуся до побачення|дуся кінець)/i)) {
-            if (window.recognition) window.recognition.stop();
-            window.stopAllSounds();
-            
-            const now = new Date();
-            const dateStr = now.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' });
-            const timeStr = now.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
-            
-            let finalMsg = `Поїздку завершено. Дякую. Сьогодні ${dateStr}, час ${timeStr}.`;
-            
-            // Перевіряємо чи є замітки
-            let notes = localStorage.getItem('dusya_notes');
-            if (notes) {
-                finalMsg += " Увага, у вашому сейфі є збережені замітки.";
-            }
-
-            window.speak(finalMsg, () => {
-                // Анімація чорної діри
-                document.getElementById('hud-center').classList.add('cinema-collapse');
-                document.body.classList.add('blackout');
-                
-                // Звук успіху
-                if(window.playChimeJingle) window.playChimeJingle();
-                
-                // Вимикаємо GPS
-                if (window.locationTimer) clearInterval(window.locationTimer);
-                
-                // Через секунду ховаємо все остаточно
-                setTimeout(() => {
-                    document.getElementById('hud-center').style.display = 'none';
-                    if (dusyaGlow) dusyaGlow.className = ''; 
-                    window.isListening = false;
-                    document.getElementById('dusya-btn').innerText = "Запустити Дусю";
-                }, 1200);
-            });
-            return;
-        }
-        // ==========================================
-
         if (window.isWaitingForCleanupConfirm) {
-            if (transcript.includes("так") || transcript.includes("очистити") || transcript.includes("видалити")) {
+            if (transcript.match(/(так|очистити|видалити)/i)) {
                 localStorage.removeItem('dusya_notes'); localStorage.removeItem('dusya_parking');
                 localStorage.setItem('dusya_last_cleanup', Date.now());
                 window.isWaitingForCleanupConfirm = false; window.speak("Сейф повністю очищено.");
-            } else if (transcript.includes("ні") || transcript.includes("залишити") || transcript.includes("не треба")) {
+            } else if (transcript.match(/(ні|залишити|не треба)/i)) {
                 localStorage.setItem('dusya_last_cleanup', Date.now());
                 window.isWaitingForCleanupConfirm = false; window.speak("Зрозуміла, залишаю всі записи.");
             } else { window.speak("Скажіть Так або Ні."); }
             return;
         }
 
-        // ==========================================
-        // [ОНОВЛЕНО] АВАРІЙНИЙ СТОП
-        // ==========================================
-        if (transcript.match(/(дуся стоп|дуся завершити|дуся хватить|дуся закрийся|дуся не пизди|дуся тихо|дуся вимкни звук|дуся зупинись)/i)) {
-            window.stopAllSounds();
-            window.isBikeMode = false;
-            if (window.noteTimerInterval) { clearInterval(window.noteTimerInterval); window.noteTimerInterval = null; }
-            window.speechSynthesis.cancel(); 
-            window.isWaitingForCommand = false; window.isRecordingNote = false; window.isTimeMachineActive = false; window.isAutoGuideActive = false;
-            
-            document.documentElement.style.setProperty('--hud-color', '#FFFFFF');
-            document.body.style.backgroundColor = ""; document.getElementById('note-overlay').style.display = 'none';
-            if (dusyaGlow) dusyaGlow.className = 'glow-green'; 
-            window.playPing(); 
-            
-            // Викликаємо нову глобальну функцію
-            if(window.resetToNavigator) window.resetToNavigator();
-            return;
-        }
-        // ==========================================
-
-        // ==========================================
-        // [ДОДАНО] УВІМКНЕННЯ РАДАРА ГОЛОСОМ
-        // ==========================================
-        if (transcript.match(/(дуся радар|дуся включи радар|дуся активуй радар|дуся режим радар)/i)) {
-            if (window.recognition) window.recognition.stop();
-            if (window.toggleRadar) {
-                window.toggleRadar(true);
-                const t = document.getElementById('ai-radar-toggle');
-                if (t) t.checked = true;
-            }
-            return;
-        }
-        // ==========================================
-
-        // РЕЖИМ ДРУГА ТА АВТО-ГІД
-        if (transcript.match(/(дуся режим друга|дуся будь другом|дуся переключи на друга|дуся режим друг)/i)) {
-            window.currentMode = "FRIEND";
-            window.isAutoGuideActive = true; 
-            if (window.recognition) window.recognition.stop();
-            window.speak("Ввімкнула режим друга. Я на зв'язку, їдемо. І до речі, розповідатиму цікавинки по дорозі.");
-            return;
-        }
-
-        // ШПАРГАЛКА КОМАНД
-        if (transcript.match(/(дуся що ти вмієш|дуся розкажи команди|дуся команди|дуся що ти можеш|дуся допомога|дуся функції|дуся як тобою керувати)/i)) {
-            if (window.recognition) window.recognition.stop(); 
-            window.speak("Я працюю локально. Скажи 'Включи Ютуб' для музики. Скажи 'Запам'ятай парковку', щоб знайти авто. Скажи 'Покажи заправки' для мапи. Скажи 'Запиши замітку' для сейфа. Або скажи 'Режим друга' для приємної розмови."); 
-            return;
-        }
-
-        // YOUTUBE ТА МУЗИКА 
-        let ytMatch = transcript.match(/(?:дуся включи|дуся відкрий|дуся знайди)\s+(?:пісню|музику|в ютубі|на ютубі|ютуб)?\s*(.*)/i);
-        if (ytMatch && (transcript.includes("ютуб") || transcript.includes("включи") || transcript.includes("пісню") || transcript.includes("відкрий"))) {
-            let ytQuery = ytMatch[1] ? ytMatch[1].trim() : ""; 
-            if (window.recognition) window.recognition.stop(); 
-            if (ytQuery) { window.speak(`Відкриваю ${ytQuery} на Ютубі.`); window.openYouTubeApp(ytQuery); } 
-            else { window.speak("Відкриваю Ютуб."); window.open(`https://www.youtube.com`, '_blank'); }
-            return;
-        }
-
-        // ЛОКАЛЬНИЙ ПОШУК ОБ'ЄКТІВ 
-        let mapMatch = transcript.match(/(?:дуся покажи|дуся знайди)\s+(заправки|заправку|кафе|макдональдс|пам'ятки|ресторани|магазини|аптеки|аптеку|туалет|парковки)/i);
-        if (mapMatch && mapMatch[1] && window.searchLocalPlaces) {
-            if (window.recognition) window.recognition.stop();
-            window.searchLocalPlaces(mapMatch[1].trim());
-            return;
-        }
-
-        // ПАРКУВАЛЬНА ПАМ'ЯТЬ 
-        if (transcript.match(/(дуся запам'ятай парковку|дуся запам'ятай машину|дуся я припаркувався|дуся тут залишаю машину|дуся відміть точку парковки|дуся запам'ятай місце)/i)) {
-            if (window.recognition) window.recognition.stop();
-            if (window.saveParking) window.saveParking(window.currentLat, window.currentLon);
-            return;
-        }
-        if (transcript.match(/(дуся де моя машина|дуся знайди машину|дуся де машина|дуся де стоянка|дуся дорогу до машини|дуся покажи дорогу назад)/i)) {
-            if (window.recognition) window.recognition.stop();
-            if (window.findCar) window.findCar();
-            return;
-        }
-
-        // ВЕЛО-ФІШКИ ТА ПАСХАЛКИ
-        if (transcript.match(/(дуся режим велосипеда|дуся я на велику)/i)) {
-            window.isBikeMode = true; document.body.style.backgroundColor = "#004d00"; 
-            document.documentElement.style.setProperty('--hud-color', '#00FF00');
-            if(window.recognition) window.recognition.stop();
-            window.speak("Вело-штурман активований! Крути педалі, я слідкую за маршрутом і швидкістю."); return;
-        }
-        if (transcript.includes("багато людей") && (transcript.includes("дуся") || window.isWaitingForCommand)) { if(window.recognition) window.recognition.stop(); window.speak("Вмикаю попереджувальний сигнал.", window.playBikeBellLoop); return; }
-        if (transcript.match(/(дуся режим нло|дуся космічний корабель)/i)) {
-            document.body.style.backgroundColor = "#191970"; 
-            document.documentElement.style.setProperty('--hud-color', '#00FFFF'); 
-            if(window.recognition) window.recognition.stop(); window.speak("Гіпер-двигун активовано.", window.playUFOLoop); return;
-        }
-
-        // РОЗУМНА АДРЕСНА КНИГА (НАВІГАТОР)
-        if (transcript.match(/(дуся маршрут додому|дуся додому|дуся дім|дуся дорога додому|дуся веди додому|дуся поїхали додому)/i)) {
-            if(window.recognition) window.recognition.stop(); 
-            if(window.startSmartNavigation) window.startSmartNavigation("дім");
-            return;
-        }
-        let smartNavMatch = transcript.match(/(?:дуся маршрут на|дуся поїхали на|дуся маршрут|дуся дорога на)\s+(роботу|робота\s+\d+|дача|гараж|школа|магазин)/i);
-        if (smartNavMatch && smartNavMatch[1]) {
-            if(window.recognition) window.recognition.stop();
-            if(window.startSmartNavigation) window.startSmartNavigation(smartNavMatch[1].trim());
-            return;
-        }
-        let routeMatch = transcript.match(/(?:дуся маршрут до|дуся доїхати до|дуся найближча)\s+(.*)/i);
-        if (routeMatch && routeMatch[1]) {
-            let target = routeMatch[1]; if(window.recognition) window.recognition.stop(); 
-            window.speak(`Відкриваю карти, будую маршрут до ${target}.`);
-            window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(target)}${window.isBikeMode ? '&travelmode=bicycling' : ''}`, '_blank');
-            return;
-        }
-
-        // ЗАМІТКИ
         if (window.isRecordingNote) {
             if (transcript.match(/(кінець|зберегти|кінець замітки)/i)) {
                 window.isRecordingNote = false;
@@ -402,31 +253,151 @@ if (SpeechRecognition) {
             return; 
         }
 
-        if (window.speechSynthesis.speaking) return; 
+        // ==========================================
+        // ГОЛОВНИЙ ЩИТ: ЯКЩО НЕ БУЛО "ДУСЯ" АБО ЗАПИТАННЯ - ІГНОРУЄМО!
+        // ==========================================
+        if (!isAddressed) return;
 
-        // МИТТЄВІ ЛОКАЛЬНІ КОМАНДИ
-        if (transcript.match(/(дуся котра година|дуся який час)/i)) { if (window.recognition) window.recognition.stop(); window.speak(`Зараз ${new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}.`); return; }
-        if (transcript.match(/(дуся яке сьогодні число|дуся яка дата)/i)) { if (window.recognition) window.recognition.stop(); window.speak(`Сьогодні ${new Date().toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' })}.`); return; }
-        if (transcript.match(/(дуся де ми|дуся яке це місто)/i)) { if (window.recognition) window.recognition.stop(); window.speak(`Ми зараз в районі ${window.currentPlaceName || "невідомо"}.`); return; }
-        if (transcript.includes("яка швидкість") && (transcript.includes("дуся") || window.isWaitingForCommand)) { if (window.recognition) window.recognition.stop(); window.speak(`Зараз наша швидкість ${window.gpsSpeed || 0}.`); return; }
+        // Тепер усі команди спрацюють безвідмовно, якщо щит пройдено!
 
-        if (transcript.match(/(дуся привітай улю|дуся привітай уля|дуся привіт уля)/i)) {
-            if (window.recognition) window.recognition.stop();
-            document.body.style.backgroundColor = "#4B0082"; 
-            document.documentElement.style.setProperty('--hud-color', '#FF1493');
-            window.playMagicSound();
-            window.speak("Ого, який важливий пасажир на борту! Привіт, Уля! Пристебни пасок, зараз буде магія! Ти слухалась тата і маму? Тоді ось тобі весела пісенька.", () => { window.openYouTubeApp("трендові пісні для підлітків 2024"); });
+        // АВАРІЙНИЙ СТОП
+        if (transcript.match(/(стоп|завершити|хватить|закрийся|не пизди|тихо|вимкни звук|зупинись)/i)) {
+            window.stopAllSounds();
+            window.isBikeMode = false;
+            if (window.noteTimerInterval) { clearInterval(window.noteTimerInterval); window.noteTimerInterval = null; }
+            window.speechSynthesis.cancel(); 
+            window.isWaitingForCommand = false; window.isRecordingNote = false; window.isTimeMachineActive = false; window.isAutoGuideActive = false;
+            
+            document.documentElement.style.setProperty('--hud-color', '#FFFFFF');
+            document.body.style.backgroundColor = ""; document.getElementById('note-overlay').style.display = 'none';
+            if (dusyaGlow) dusyaGlow.className = 'glow-green'; 
+            window.playPing(); 
+            
+            if(window.resetToNavigator) window.resetToNavigator();
             return;
         }
 
-        // СИНХРОНІЗАЦІЯ КОЛЬОРІВ HUD
-        if (transcript.includes("колір червоний") && (transcript.includes("дуся") || window.isWaitingForCommand)) { document.documentElement.style.setProperty('--hud-color', '#FF0000'); if(window.recognition) window.recognition.stop(); window.speak("Колір червоний."); return; }
-        if (transcript.includes("колір зелений") && (transcript.includes("дуся") || window.isWaitingForCommand)) { document.documentElement.style.setProperty('--hud-color', '#00FF00'); if(window.recognition) window.recognition.stop(); window.speak("Колір зелений."); return; }
-        if (transcript.includes("колір жовтий") && (transcript.includes("дуся") || window.isWaitingForCommand)) { document.documentElement.style.setProperty('--hud-color', '#FFFF00'); if(window.recognition) window.recognition.stop(); window.speak("Колір жовтий."); return; }
-        if (transcript.includes("колір білий") && (transcript.includes("дуся") || window.isWaitingForCommand)) { document.documentElement.style.setProperty('--hud-color', '#FFFFFF'); if(window.recognition) window.recognition.stop(); window.speak("Колір білий."); return; }
-        if (transcript.includes("колір синій") && (transcript.includes("дуся") || window.isWaitingForCommand)) { document.documentElement.style.setProperty('--hud-color', '#00BFFF'); if(window.recognition) window.recognition.stop(); window.speak("Колір синій."); return; }
+        // ПРОЩАННЯ
+        if (transcript.match(/(приїхали|до побачення|кінець)/i)) {
+            if (window.recognition) window.recognition.stop();
+            window.stopAllSounds();
+            
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' });
+            const timeStr = now.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+            
+            let finalMsg = `Поїздку завершено. Дякую. Сьогодні ${dateStr}, час ${timeStr}.`;
+            let notes = localStorage.getItem('dusya_notes');
+            if (notes) finalMsg += " Увага, у вашому сейфі є збережені замітки.";
 
-        if (transcript.match(/(дуся запиши замітку|дуся додай замітку)/i)) {
+            window.speak(finalMsg, () => {
+                document.getElementById('hud-center').classList.add('cinema-collapse');
+                document.body.classList.add('blackout');
+                if(window.playChimeJingle) window.playChimeJingle();
+                if (window.locationTimer) clearInterval(window.locationTimer);
+                setTimeout(() => {
+                    document.getElementById('hud-center').style.display = 'none';
+                    if (dusyaGlow) dusyaGlow.className = ''; 
+                    window.isListening = false;
+                    document.getElementById('dusya-btn').innerText = "Запустити Дусю";
+                }, 1200);
+            });
+            return;
+        }
+
+        // РАДАР
+        if (transcript.match(/(радар|включи радар|активуй радар|режим радар)/i)) {
+            if (window.recognition) window.recognition.stop();
+            if (window.toggleRadar) {
+                window.toggleRadar(true);
+                const t = document.getElementById('ai-radar-toggle');
+                if (t) t.checked = true;
+            }
+            return;
+        }
+
+        // РЕЖИМ ДРУГА ТА АВТО-ГІД
+        if (transcript.match(/(режим друга|будь другом|переключи на друга|режим друг)/i)) {
+            window.currentMode = "FRIEND";
+            window.isAutoGuideActive = true; 
+            if (window.recognition) window.recognition.stop();
+            window.speak("Ввімкнула режим друга. Я на зв'язку, їдемо. І до речі, розповідатиму цікавинки по дорозі.");
+            return;
+        }
+
+        // ШПАРГАЛКА
+        if (transcript.match(/(що ти вмієш|розкажи команди|команди|що ти можеш|допомога|функції|як тобою керувати)/i)) {
+            if (window.recognition) window.recognition.stop(); 
+            window.speak("Я працюю локально. Скажи 'Включи Ютуб' для музики. Скажи 'Запам'ятай парковку', щоб знайти авто. Скажи 'Покажи заправки' для мапи. Скажи 'Запиши замітку' для сейфа. Або скажи 'Режим друга' для приємної розмови."); 
+            return;
+        }
+
+        // YOUTUBE
+        let ytMatch = transcript.match(/(?:включи|відкрий|знайди)\s+(?:пісню|музику|в ютубі|на ютубі|ютуб)?\s*(.*)/i);
+        if (ytMatch && (transcript.includes("ютуб") || transcript.includes("включи") || transcript.includes("пісню") || transcript.includes("відкрий"))) {
+            let ytQuery = ytMatch[1] ? ytMatch[1].trim() : ""; 
+            if (window.recognition) window.recognition.stop(); 
+            if (ytQuery) { window.speak(`Відкриваю ${ytQuery} на Ютубі.`); window.openYouTubeApp(ytQuery); } 
+            else { window.speak("Відкриваю Ютуб."); window.open(`https://www.youtube.com`, '_blank'); }
+            return;
+        }
+
+        // ЛОКАЛЬНИЙ ПОШУК ОБ'ЄКТІВ 
+        let mapMatch = transcript.match(/(?:покажи|знайди)\s+(заправки|заправку|кафе|макдональдс|пам'ятки|ресторани|магазини|аптеки|аптеку|туалет|парковки)/i);
+        if (mapMatch && mapMatch[1] && window.searchLocalPlaces) {
+            if (window.recognition) window.recognition.stop();
+            window.searchLocalPlaces(mapMatch[1].trim());
+            return;
+        }
+
+        // ПАРКУВАЛЬНА ПАМ'ЯТЬ 
+        if (transcript.match(/(запам'ятай парковку|запам'ятай машину|я припаркувався|тут залишаю машину|відміть точку парковки|запам'ятай місце)/i)) {
+            if (window.recognition) window.recognition.stop();
+            if (window.saveParking) window.saveParking(window.currentLat, window.currentLon);
+            return;
+        }
+        if (transcript.match(/(де моя машина|знайди машину|де машина|де стоянка|дорогу до машини|покажи дорогу назад)/i)) {
+            if (window.recognition) window.recognition.stop();
+            if (window.findCar) window.findCar();
+            return;
+        }
+
+        // ВЕЛО-ФІШКИ ТА ПАСХАЛКИ
+        if (transcript.match(/(режим велосипеда|я на велику)/i)) {
+            window.isBikeMode = true; document.body.style.backgroundColor = "#004d00"; 
+            document.documentElement.style.setProperty('--hud-color', '#00FF00');
+            if(window.recognition) window.recognition.stop();
+            window.speak("Вело-штурман активований! Крути педалі, я слідкую за маршрутом і швидкістю."); return;
+        }
+        if (transcript.includes("багато людей")) { if(window.recognition) window.recognition.stop(); window.speak("Вмикаю попереджувальний сигнал.", window.playBikeBellLoop); return; }
+        if (transcript.match(/(режим нло|космічний корабель)/i)) {
+            document.body.style.backgroundColor = "#191970"; 
+            document.documentElement.style.setProperty('--hud-color', '#00FFFF'); 
+            if(window.recognition) window.recognition.stop(); window.speak("Гіпер-двигун активовано.", window.playUFOLoop); return;
+        }
+
+        // РОЗУМНА АДРЕСНА КНИГА (НАВІГАТОР)
+        if (transcript.match(/(маршрут додому|додому|дім|дорога додому|веди додому|поїхали додому)/i)) {
+            if(window.recognition) window.recognition.stop(); 
+            if(window.startSmartNavigation) window.startSmartNavigation("дім");
+            return;
+        }
+        let smartNavMatch = transcript.match(/(?:маршрут на|поїхали на|маршрут|дорога на)\s+(роботу|робота\s+\d+|дача|гараж|школа|магазин)/i);
+        if (smartNavMatch && smartNavMatch[1]) {
+            if(window.recognition) window.recognition.stop();
+            if(window.startSmartNavigation) window.startSmartNavigation(smartNavMatch[1].trim());
+            return;
+        }
+        let routeMatch = transcript.match(/(?:маршрут до|доїхати до|найближча)\s+(.*)/i);
+        if (routeMatch && routeMatch[1]) {
+            let target = routeMatch[1]; if(window.recognition) window.recognition.stop(); 
+            window.speak(`Відкриваю карти, будую маршрут до ${target}.`);
+            window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(target)}${window.isBikeMode ? '&travelmode=bicycling' : ''}`, '_blank');
+            return;
+        }
+
+        // ЗАМІТКИ (Запуск, видалення, читання)
+        if (transcript.match(/(запиши замітку|додай замітку)/i)) {
             window.isRecordingNote = true; window.currentNoteText = "";
             let noteStartTime = Date.now();
             if (window.noteTimerInterval) clearInterval(window.noteTimerInterval);
@@ -440,10 +411,10 @@ if (SpeechRecognition) {
             }, 1000);
             if (window.recognition) window.recognition.stop(); window.speak("Слухаю. Коли закінчиш, скажи Кінець."); return;
         }
-        if (transcript.match(/(дуся прочитай замітки|дуся мої замітки)/i)) { let notes = localStorage.getItem('dusya_notes'); if (window.recognition) window.recognition.stop(); if (notes) window.speak("У сейфі є такі записи: " + notes); else window.speak("Сейф порожній."); return; }
-        if (transcript.match(/(дуся видали всі замітки|дуся очистити сейф)/i)) { localStorage.removeItem('dusya_notes'); if (window.recognition) window.recognition.stop(); window.speak("Сейф порожній, всі замітки видалено."); return; }
+        if (transcript.match(/(прочитай замітки|мої замітки)/i)) { let notes = localStorage.getItem('dusya_notes'); if (window.recognition) window.recognition.stop(); if (notes) window.speak("У сейфі є такі записи: " + notes); else window.speak("Сейф порожній."); return; }
+        if (transcript.match(/(видали всі замітки|очистити сейф)/i)) { localStorage.removeItem('dusya_notes'); if (window.recognition) window.recognition.stop(); window.speak("Сейф порожній, всі замітки видалено."); return; }
 
-        if (transcript.match(/(дуся машина часу|дуся назад у майбутнє)/i)) {
+        if (transcript.match(/(машина часу|назад у майбутнє)/i)) {
             window.isTimeMachineActive = true; window.said88mph = false; document.body.style.backgroundColor = "#000000";
             document.documentElement.style.setProperty('--hud-color', '#00FF00');
             const speedElement = document.getElementById('speed-display');
@@ -451,46 +422,68 @@ if (SpeechRecognition) {
             if (window.recognition) window.recognition.stop(); window.speak("Конденсатор потоку увімкнено! Готові до стрибка в часі."); return;
         }
 
-        if (transcript.match(/(дуся режим балабола|дуся будь балаболом)/i)) {
+        if (transcript.match(/(режим балабола|будь балаболом)/i)) {
             window.currentMode = "CHATTERBOX"; window.isAutoGuideActive = false;
             if (window.recognition) window.recognition.stop();
             window.speak("О, це мій улюблений режим! Вмикаю Балабола. Ну що, розкажи, як настрій сьогодні в дорозі?");
             window.isWaitingForCommand = true; clearTimeout(window.waitingTimer); window.waitingTimer = setTimeout(() => { window.isWaitingForCommand = false; }, 10000); return;
         }
         
+        // МИТТЄВІ ЛОКАЛЬНІ КОМАНДИ
+        if (transcript.match(/(котра година|який час)/i)) { if (window.recognition) window.recognition.stop(); window.speak(`Зараз ${new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}.`); return; }
+        if (transcript.match(/(яке сьогодні число|яка дата)/i)) { if (window.recognition) window.recognition.stop(); window.speak(`Сьогодні ${new Date().toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' })}.`); return; }
+        if (transcript.match(/(де ми|яке це місто)/i)) { if (window.recognition) window.recognition.stop(); window.speak(`Ми зараз в районі ${window.currentPlaceName || "невідомо"}.`); return; }
+        if (transcript.includes("яка швидкість")) { if (window.recognition) window.recognition.stop(); window.speak(`Зараз наша швидкість ${window.gpsSpeed || 0}.`); return; }
+
         let weatherMatch = transcript.match(/погода\s+(?:в|у)\s+([а-яєіїґ-]+)/i);
-        if (transcript.includes("погода") && (transcript.includes("дуся") || window.isWaitingForCommand)) { 
+        if (transcript.includes("погода")) { 
             let city = weatherMatch ? weatherMatch[1] : null; 
             if (window.handleWeatherCommand) window.handleWeatherCommand(city); return; 
         }
 
-        let isAddressed = transcript.includes("дуся") || window.isWaitingForCommand;
+        if (transcript.match(/(привітай улю|привітай уля|привіт уля)/i)) {
+            if (window.recognition) window.recognition.stop();
+            document.body.style.backgroundColor = "#4B0082"; 
+            document.documentElement.style.setProperty('--hud-color', '#FF1493');
+            window.playMagicSound();
+            window.speak("Ого, який важливий пасажир на борту! Привіт, Уля! Пристебни пасок, зараз буде магія! Ти слухалась тата і маму? Тоді ось тобі весела пісенька.", () => { window.openYouTubeApp("трендові пісні для підлітків 2024"); });
+            return;
+        }
 
-        if (isAddressed) {
-            clearTimeout(window.waitingTimer); window.isWaitingForCommand = false;
-            let cleanQuery = transcript;
-            if (transcript.includes("дуся")) {
-                cleanQuery = transcript.substring(transcript.indexOf("дуся") + 4).trim().replace(/^[,.!?\s]+/, "").trim();
+        // СИНХРОНІЗАЦІЯ КОЛЬОРІВ HUD
+        if (transcript.includes("колір червоний")) { document.documentElement.style.setProperty('--hud-color', '#FF0000'); if(window.recognition) window.recognition.stop(); window.speak("Колір червоний."); return; }
+        if (transcript.includes("колір зелений")) { document.documentElement.style.setProperty('--hud-color', '#00FF00'); if(window.recognition) window.recognition.stop(); window.speak("Колір зелений."); return; }
+        if (transcript.includes("колір жовтий")) { document.documentElement.style.setProperty('--hud-color', '#FFFF00'); if(window.recognition) window.recognition.stop(); window.speak("Колір жовтий."); return; }
+        if (transcript.includes("колір білий")) { document.documentElement.style.setProperty('--hud-color', '#FFFFFF'); if(window.recognition) window.recognition.stop(); window.speak("Колір білий."); return; }
+        if (transcript.includes("колір синій")) { document.documentElement.style.setProperty('--hud-color', '#00BFFF'); if(window.recognition) window.recognition.stop(); window.speak("Колір синій."); return; }
+
+
+        // ЯКЩО ЖОДНА ЛОКАЛЬНА КОМАНДА НЕ СПРАЦЮВАЛА -> ПИТАЄМО ШТУЧНИЙ ІНТЕЛЕКТ
+        clearTimeout(window.waitingTimer); window.isWaitingForCommand = false;
+        let cleanQuery = transcript;
+        
+        // Відрізаємо слово "Дуся" і все що до нього, щоб не відправляти його в ШІ
+        if (transcript.includes("дуся")) {
+            cleanQuery = transcript.substring(transcript.indexOf("дуся") + 4).trim().replace(/^[,.!?\s]+/, "").trim();
+        }
+
+        if (cleanQuery.length > 0) {
+            if (dusyaGlow) dusyaGlow.className = 'glow-yellow'; 
+            if (window.recognition) window.recognition.stop(); 
+            
+            const aiResponse = await window.askDusyaAI(cleanQuery);
+            window.speak(aiResponse);
+
+            if (window.currentMode === "CHATTERBOX") {
+                window.isWaitingForCommand = true; clearTimeout(window.waitingTimer);
+                window.waitingTimer = setTimeout(() => { window.isWaitingForCommand = false; }, 10000);
             }
-
-            if (cleanQuery.length > 0) {
-                if (dusyaGlow) dusyaGlow.className = 'glow-yellow'; 
-                if (window.recognition) window.recognition.stop(); 
-                
-                const aiResponse = await window.askDusyaAI(cleanQuery);
-                window.speak(aiResponse);
-
-                if (window.currentMode === "CHATTERBOX") {
-                    window.isWaitingForCommand = true; clearTimeout(window.waitingTimer);
-                    window.waitingTimer = setTimeout(() => { window.isWaitingForCommand = false; }, 10000);
-                }
-            } else {
-                if (dusyaGlow) dusyaGlow.className = 'glow-green'; 
-                window.isWaitingForCommand = true;
-                window.waitingTimer = setTimeout(() => { window.isWaitingForCommand = false; }, 10000); 
-                if (window.recognition) window.recognition.stop(); 
-                window.speak("Слухаю");
-            }
+        } else {
+            if (dusyaGlow) dusyaGlow.className = 'glow-green'; 
+            window.isWaitingForCommand = true;
+            window.waitingTimer = setTimeout(() => { window.isWaitingForCommand = false; }, 10000); 
+            if (window.recognition) window.recognition.stop(); 
+            window.speak("Слухаю");
         }
     };
 
