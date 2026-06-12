@@ -8,7 +8,7 @@ if ('serviceWorker' in navigator) {
     });
 }
 
-console.log("Запуск Дусі v7.3: Конфлікт констант вирішено!");
+console.log("Запуск Дусі v7.4: Розумна адресна кнопка та Привітання");
 
 // 1. ГЛОБАЛЬНІ ЗМІННІ ТА ЕЛЕМЕНТИ
 const speedElement = document.getElementById('speed-display');
@@ -69,15 +69,14 @@ function resetInactivityTimer() {
 document.addEventListener('touchstart', resetInactivityTimer);
 document.addEventListener('mousedown', resetInactivityTimer);
 
-// 3. ЛОГІКА НАЛАШТУВАНЬ
+// 3. ЛОГІКА НАЛАШТУВАНЬ ТА КНОПОК
 const settingsBtn = document.getElementById('settings-btn');
 const settingsModal = document.getElementById('settings-modal');
 const closeSettingsBtn = document.getElementById('close-settings-btn');
 const saveSettingsBtn = document.getElementById('save-settings-btn');
 const apiKeyInput = document.getElementById('api-key-input');
-
-// ВИПРАВЛЕНО: Змінили назву константи, щоб не конфліктувала з radar.js
 const radarToggleCheckbox = document.getElementById('ai-radar-toggle');
+const openMapBtn = document.getElementById('open-map-btn'); // КНОПКА МАПИ
 
 window.addEventListener('DOMContentLoaded', () => {
     try { 
@@ -97,6 +96,22 @@ if (closeSettingsBtn) {
     closeSettingsBtn.addEventListener('click', () => {
         if (settingsModal) settingsModal.classList.add('hidden');
         resetInactivityTimer();
+    });
+}
+
+// ЛОГІКА КНОПКИ "Відкрити мапу точок"
+if (openMapBtn) {
+    openMapBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!window.currentLat || !window.currentLon) {
+            alert("GPS ще не знайдено. Увімкніть Дусю, зачекайте 2 секунди і спробуйте знову.");
+            return;
+        }
+        let placeName = prompt("📍 ЗБЕРЕЖЕННЯ ТОЧКИ:\nВведіть назву для вашого поточного місця (наприклад: дім, робота, дача):");
+        if (placeName && placeName.trim() !== "") {
+            if (window.saveAddress) window.saveAddress(placeName.trim(), window.currentLat, window.currentLon);
+            alert(`✅ Точку "${placeName}" успішно збережено!\nТепер ви можете просто сказати: "Дуся, маршрут на ${placeName}".`);
+        }
     });
 }
 
