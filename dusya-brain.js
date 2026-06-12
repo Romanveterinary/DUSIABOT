@@ -106,6 +106,10 @@ window.speak = function(text, onEndCallback = null) {
         if (onEndCallback) onEndCallback();
         return; 
     }
+    
+    const dusyaGlow = document.getElementById('dusya-glow');
+    if (dusyaGlow) dusyaGlow.className = ''; // Вимикаємо неонове світло під час розмови
+
     if ('speechSynthesis' in window) {
         if (window.recognition) { try { window.recognition.stop(); } catch(e){} }
         window.speechSynthesis.cancel(); 
@@ -126,16 +130,16 @@ window.speak = function(text, onEndCallback = null) {
             } else if (window.isListening && !window.isRadarActive && !window.speechSynthesis.speaking && !window.isRecordingNote && !window.isWaitingForCleanupConfirm) {
                 try { 
                     window.recognition.start(); 
-                    const statusElement = document.getElementById('status-text');
-                    const dusyaBtn = document.getElementById('dusya-btn');
-                    if (statusElement) statusElement.innerText = "Дуся: Слухаю..."; 
-                    if (dusyaBtn) dusyaBtn.style.backgroundColor = "#00FF00"; 
+                    if (dusyaGlow) dusyaGlow.className = 'glow-green'; // Повертаємо зелене світло, Дуся знову слухає
                 } catch(e) { }
             }
         };
         utterance.onerror = () => { 
             if (window.isListening && !window.isRadarActive && !window.isRecordingNote) { 
-                try { window.recognition.start(); document.getElementById('dusya-btn').style.backgroundColor = "#00FF00"; } catch(e) { } 
+                try { 
+                    window.recognition.start(); 
+                    if (dusyaGlow) dusyaGlow.className = 'glow-green'; 
+                } catch(e) { } 
             } 
         };
         window.speechSynthesis.speak(utterance);
@@ -206,12 +210,10 @@ if (SpeechRecognition) {
         const transcript = event.results[last][0].transcript.toLowerCase().trim();
         console.log("Дуся почула: ", transcript);
 
-        const dusyaBtn = document.getElementById('dusya-btn');
-        const statusElement = document.getElementById('status-text');
-        const speedElement = document.getElementById('speed-display');
+        const dusyaGlow = document.getElementById('dusya-glow');
 
         if (transcript.includes("дуся") || window.isWaitingForCommand) { 
-            if (dusyaBtn) dusyaBtn.style.backgroundColor = "#FFA500"; 
+            if (dusyaGlow) dusyaGlow.className = 'glow-yellow'; 
             window.playPing(); 
         }
 
@@ -237,10 +239,10 @@ if (SpeechRecognition) {
             window.currentMode = "DEFAULT"; window.chatHistory = []; 
             window.isWaitingForCommand = false; window.isRecordingNote = false; window.isTimeMachineActive = false; window.isAutoGuideActive = false;
             
-            if (speedElement) { speedElement.style.color = "white"; speedElement.style.fontFamily = ""; speedElement.style.textShadow = "none"; }
+            document.documentElement.style.setProperty('--hud-color', '#FFFFFF'); // Скидаємо колір на білий
             document.body.style.backgroundColor = ""; document.getElementById('note-overlay').style.display = 'none';
-            if (dusyaBtn) dusyaBtn.style.backgroundColor = "#00FF00"; 
-            window.playPing(); if (statusElement) statusElement.innerText = "Дуся: Режим Штурмана";
+            if (dusyaGlow) dusyaGlow.className = 'glow-green'; 
+            window.playPing(); 
             if (window.recognition) { try { window.recognition.stop(); } catch(e){} }
             window.speak("Зрозуміла. Всі ефекти вимкнено, режим авто-штурмана повернуто.");
             return;
@@ -295,13 +297,14 @@ if (SpeechRecognition) {
         // ВЕЛО-ФІШКИ ТА ПАСХАЛКИ
         if (transcript.match(/(режим велосипеда|я на велику)/i)) {
             window.isBikeMode = true; document.body.style.backgroundColor = "#004d00"; 
-            if (speedElement) speedElement.style.color = "#00FF00";
+            document.documentElement.style.setProperty('--hud-color', '#00FF00');
             if(window.recognition) window.recognition.stop();
             window.speak("Вело-штурман активований! Крути педалі, я слідкую за маршрутом і швидкістю."); return;
         }
         if (transcript.includes("багато людей")) { if(window.recognition) window.recognition.stop(); window.speak("Вмикаю попереджувальний сигнал.", window.playBikeBellLoop); return; }
         if (transcript.match(/(режим нло|космічний корабель)/i)) {
-            document.body.style.backgroundColor = "#191970"; if (speedElement) speedElement.style.color = "#00FFFF"; 
+            document.body.style.backgroundColor = "#191970"; 
+            document.documentElement.style.setProperty('--hud-color', '#00FFFF'); 
             if(window.recognition) window.recognition.stop(); window.speak("Гіпер-двигун активовано.", window.playUFOLoop); return;
         }
 
@@ -324,7 +327,6 @@ if (SpeechRecognition) {
                     localStorage.setItem('dusya_notes', existingNotes + (existingNotes ? " | " : "") + window.currentNoteText.trim());
                     window.speak("Замітку надійно збережено у сейф.");
                 } else { window.speak("Запис порожній."); }
-                if (statusElement) statusElement.innerText = "Дуся: Слухаю...";
                 if (window.recognition) { try { window.recognition.stop(); } catch(e){} }
             } else { window.currentNoteText += " " + transcript; }
             return; 
@@ -341,17 +343,18 @@ if (SpeechRecognition) {
         if (transcript.match(/(привітай улю|привітай уля|привіт уля)/i)) {
             if (window.recognition) window.recognition.stop();
             document.body.style.backgroundColor = "#4B0082"; 
-            if (speedElement) { speedElement.style.color = "#FF1493"; speedElement.style.textShadow = "0 0 30px #FF1493"; }
+            document.documentElement.style.setProperty('--hud-color', '#FF1493');
             window.playMagicSound();
             window.speak("Ого, який важливий пасажир на борту! Привіт, Уля! Пристебни пасок, зараз буде магія! Ти слухалась тата і маму? Тоді ось тобі весела пісенька.", () => { window.openYouTubeApp("трендові пісні для підлітків 2024"); });
             return;
         }
 
-        if (transcript.includes("колір червоний")) { if (speedElement) speedElement.style.color = "red"; if(window.recognition) window.recognition.stop(); window.speak("Колір червоний."); return; }
-        if (transcript.includes("колір зелений")) { if (speedElement) speedElement.style.color = "#00FF00"; if(window.recognition) window.recognition.stop(); window.speak("Колір зелений."); return; }
-        if (transcript.includes("колір жовтий")) { if (speedElement) speedElement.style.color = "yellow"; if(window.recognition) window.recognition.stop(); window.speak("Колір жовтий."); return; }
-        if (transcript.includes("колір білий")) { if (speedElement) speedElement.style.color = "white"; if(window.recognition) window.recognition.stop(); window.speak("Колір білий."); return; }
-        if (transcript.includes("колір синій")) { if (speedElement) speedElement.style.color = "#00BFFF"; if(window.recognition) window.recognition.stop(); window.speak("Колір синій."); return; }
+        // СИНХРОНІЗАЦІЯ КОЛЬОРІВ HUD
+        if (transcript.includes("колір червоний")) { document.documentElement.style.setProperty('--hud-color', '#FF0000'); if(window.recognition) window.recognition.stop(); window.speak("Колір червоний."); return; }
+        if (transcript.includes("колір зелений")) { document.documentElement.style.setProperty('--hud-color', '#00FF00'); if(window.recognition) window.recognition.stop(); window.speak("Колір зелений."); return; }
+        if (transcript.includes("колір жовтий")) { document.documentElement.style.setProperty('--hud-color', '#FFFF00'); if(window.recognition) window.recognition.stop(); window.speak("Колір жовтий."); return; }
+        if (transcript.includes("колір білий")) { document.documentElement.style.setProperty('--hud-color', '#FFFFFF'); if(window.recognition) window.recognition.stop(); window.speak("Колір білий."); return; }
+        if (transcript.includes("колір синій")) { document.documentElement.style.setProperty('--hud-color', '#00BFFF'); if(window.recognition) window.recognition.stop(); window.speak("Колір синій."); return; }
 
         if (transcript.match(/(запиши замітку|додай замітку)/i)) {
             window.isRecordingNote = true; window.currentNoteText = "";
@@ -372,7 +375,9 @@ if (SpeechRecognition) {
 
         if (transcript.match(/(машина часу|назад у майбутнє)/i)) {
             window.isTimeMachineActive = true; window.said88mph = false; document.body.style.backgroundColor = "#000000";
-            if (speedElement) { speedElement.style.fontFamily = "'Courier New', Courier, monospace"; speedElement.style.color = "#00FF00"; speedElement.style.textShadow = "0 0 20px #00FF00"; }
+            document.documentElement.style.setProperty('--hud-color', '#00FF00');
+            const speedElement = document.getElementById('speed-display');
+            if (speedElement) speedElement.style.fontFamily = "'Courier New', Courier, monospace"; 
             if (window.recognition) window.recognition.stop(); window.speak("Конденсатор потоку увімкнено! Готові до стрибка в часі."); return;
         }
 
@@ -399,20 +404,18 @@ if (SpeechRecognition) {
             }
 
             if (cleanQuery.length > 0) {
-                if (statusElement) statusElement.innerText = "Дуся: Думаю...";
+                if (dusyaGlow) dusyaGlow.className = 'glow-yellow'; // Жовтий під час роздумів
                 if (window.recognition) window.recognition.stop(); 
                 
                 const aiResponse = await window.askDusyaAI(cleanQuery);
-                if (dusyaBtn) dusyaBtn.style.backgroundColor = "#00FF00"; 
-                if (statusElement) statusElement.innerText = "Дуся: Говорю..."; window.speak(aiResponse);
+                window.speak(aiResponse);
 
                 if (window.currentMode === "CHATTERBOX") {
                     window.isWaitingForCommand = true; clearTimeout(window.waitingTimer);
                     window.waitingTimer = setTimeout(() => { window.isWaitingForCommand = false; }, 10000);
                 }
             } else {
-                if (statusElement) statusElement.innerText = "Дуся: Слухаю...";
-                if (dusyaBtn) dusyaBtn.style.backgroundColor = "#00FF00"; 
+                if (dusyaGlow) dusyaGlow.className = 'glow-green'; // Зелений, бо продовжує слухати
                 window.isWaitingForCommand = true;
                 window.waitingTimer = setTimeout(() => { window.isWaitingForCommand = false; }, 10000); 
                 if (window.recognition) window.recognition.stop(); 
