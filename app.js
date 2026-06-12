@@ -1,10 +1,14 @@
+// ==========================================
+// ГОЛОВНИЙ ДИСПЕТЧЕР (app.js)
+// ==========================================
+
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js').catch(() => {});
     });
 }
 
-console.log("Запуск Дусі v7.2: HUD-інтерфейс, Без блокування");
+console.log("Запуск Дусі v7.3: Конфлікт констант вирішено!");
 
 // 1. ГЛОБАЛЬНІ ЗМІННІ ТА ЕЛЕМЕНТИ
 const speedElement = document.getElementById('speed-display');
@@ -71,7 +75,9 @@ const settingsModal = document.getElementById('settings-modal');
 const closeSettingsBtn = document.getElementById('close-settings-btn');
 const saveSettingsBtn = document.getElementById('save-settings-btn');
 const apiKeyInput = document.getElementById('api-key-input');
-const aiRadarToggle = document.getElementById('ai-radar-toggle');
+
+// ВИПРАВЛЕНО: Змінили назву константи, щоб не конфліктувала з radar.js
+const radarToggleCheckbox = document.getElementById('ai-radar-toggle');
 
 window.addEventListener('DOMContentLoaded', () => {
     try { 
@@ -100,9 +106,9 @@ if (saveSettingsBtn) {
             const key = apiKeyInput.value.trim();
             if (key) localStorage.setItem('gemini_api_key', key);
         }
-        if (aiRadarToggle && window.toggleRadar) {
-            if (aiRadarToggle.checked !== window.isRadarActive) {
-                window.toggleRadar(aiRadarToggle.checked);
+        if (radarToggleCheckbox && window.toggleRadar) {
+            if (radarToggleCheckbox.checked !== window.isRadarActive) {
+                window.toggleRadar(radarToggleCheckbox.checked);
             }
         }
         saveSettingsBtn.innerText = "✅ Збережено!"; 
@@ -172,7 +178,7 @@ if (dusyaBtn) {
             
             if (window.isRadarActive && window.toggleRadar) { 
                 window.toggleRadar(false); 
-                if(aiRadarToggle) aiRadarToggle.checked = false; 
+                if(radarToggleCheckbox) radarToggleCheckbox.checked = false; 
             }
             
             if (window.noteTimerInterval) { clearInterval(window.noteTimerInterval); window.noteTimerInterval = null; }
