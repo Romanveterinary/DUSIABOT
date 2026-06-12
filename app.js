@@ -113,36 +113,40 @@ if (closeSettingsBtn) {
     });
 }
 
-// РОЗУМНА АДРЕСНА КНИГА (ПОШУК ЗА НАЗВОЮ АБО АДРЕСОЮ)
+// ВІДКРИТТЯ ІНТЕРАКТИВНОЇ МАПИ
 if (openMapBtn) {
-    openMapBtn.addEventListener('click', async (e) => {
+    openMapBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        
-        let address = prompt("📍 ПОШУК ТОЧКИ:\nВведіть адресу або назву місця\n(наприклад: Київ, Хрещатик 1  або  Епіцентр Хмельницький):");
-        if (!address || address.trim() === "") return;
-        
-        try {
-            // Шукаємо координати через безкоштовний API OpenStreetMap
-            let res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1&accept-language=uk`);
-            let data = await res.json();
-            
-            if (data && data.length > 0) {
-                let lat = data[0].lat;
-                let lon = data[0].lon;
-                let displayName = data[0].display_name.split(',').slice(0, 2).join(','); // Беремо лише початок довгої адреси
-                
-                let placeName = prompt(`✅ Знайдено:\n${displayName}\n\nВведіть коротку назву для голосової команди\n(наприклад: дім, робота, гараж):`);
-                
-                if (placeName && placeName.trim() !== "") {
-                    if (window.saveAddress) window.saveAddress(placeName.trim(), lat, lon);
-                    alert(`Готово! Точку "${placeName}" збережено.\nТепер просто скажіть: "Дуся, маршрут на ${placeName}".`);
-                }
-            } else {
-                alert("❌ На жаль, не вдалося знайти таку адресу. Спробуйте написати по-іншому (Додайте назву міста).");
-            }
-        } catch (err) {
-            alert("Помилка з'єднання з сервером пошуку.");
+        if (window.openInteractiveMap) window.openInteractiveMap();
+    });
+}
+
+// ЗАКРИТТЯ МАПИ
+const closeMapBtn = document.getElementById('close-map-btn');
+if (closeMapBtn) {
+    closeMapBtn.addEventListener('click', () => {
+        document.getElementById('map-modal').classList.add('hidden');
+        resetInactivityTimer();
+    });
+}
+
+if (saveSettingsBtn) {
+    saveSettingsBtn.addEventListener('click', () => {
+        if (apiKeyInput) {
+            const key = apiKeyInput.value.trim();
+            if (key) localStorage.setItem('gemini_api_key', key);
         }
+        if (radarToggleCheckbox && window.toggleRadar) {
+            if (radarToggleCheckbox.checked !== window.isRadarActive) {
+                window.toggleRadar(radarToggleCheckbox.checked);
+            }
+        }
+        saveSettingsBtn.innerText = "✅ Збережено!"; 
+        setTimeout(() => { 
+            if (settingsModal) settingsModal.classList.add('hidden'); 
+            saveSettingsBtn.innerText = "Зберегти"; 
+            resetInactivityTimer();
+        }, 1000);
     });
 }
 
