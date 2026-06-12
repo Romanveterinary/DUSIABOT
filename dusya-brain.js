@@ -230,7 +230,7 @@ if (SpeechRecognition) {
         }
 
         // АВАРІЙНИЙ СТОП
-        if (transcript.match(/(стоп|завершити|хватить|закрийся|все нормально|тихо|вимкни звук)/i)) {
+        if (transcript.match(/(стоп|завершити|хватить|закрийся|не пизди|тихо|вимкни звук)/i)) {
             window.stopAllSounds();
             window.isBikeMode = false;
             if (window.isRadarActive && window.toggleRadar) { window.toggleRadar(false); const t = document.getElementById('ai-radar-toggle'); if(t) t.checked = false; }
@@ -308,6 +308,18 @@ if (SpeechRecognition) {
             if(window.recognition) window.recognition.stop(); window.speak("Гіпер-двигун активовано.", window.playUFOLoop); return;
         }
 
+        // РОЗУМНА АДРЕСНА КНИГА (НОВИЙ НАВІГАТОР)
+        if (transcript.match(/(маршрут додому|додому|поїхали додому)/i)) {
+            if(window.recognition) window.recognition.stop(); 
+            if(window.startSmartNavigation) window.startSmartNavigation("дім");
+            return;
+        }
+        let smartNavMatch = transcript.match(/(?:маршрут на|поїхали на|маршрут)\s+(роботу|робота\s+\d+|дача|гараж)/i);
+        if (smartNavMatch && smartNavMatch[1]) {
+            if(window.recognition) window.recognition.stop();
+            if(window.startSmartNavigation) window.startSmartNavigation(smartNavMatch[1]);
+            return;
+        }
         let routeMatch = transcript.match(/(?:маршрут до|доїхати до|найближча)\s+(.*)/i);
         if (routeMatch && routeMatch[1]) {
             let target = routeMatch[1]; if(window.recognition) window.recognition.stop(); 
