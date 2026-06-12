@@ -45,6 +45,76 @@ window.isFirstLocationCheck = true;
 
 let inactivityTimer = null; 
 
+// ==========================================
+// [ДОДАНО] ЛОГІКА ІНДИКАТОРА ІНТЕРНЕТУ
+// ==========================================
+function updateNetworkStatus() {
+    const indicator = document.getElementById('network-indicator');
+    if (!indicator) return;
+    
+    // Скидаємо класи
+    indicator.className = '';
+    
+    if (navigator.onLine) {
+        // Якщо інтернет є, робимо псевдо-пінг для перевірки швидкості (швидка відповідь від гугла)
+        let startTime = Date.now();
+        fetch('https://dns.google/resolve?name=google.com', { mode: 'no-cors', cache: 'no-store' })
+            .then(() => {
+                let ping = Date.now() - startTime;
+                if (ping < 500) indicator.classList.add('net-good'); // Зелений
+                else indicator.classList.add('net-weak'); // Жовтий
+            })
+            .catch(() => indicator.classList.add('net-bad')); // Червоний
+    } else {
+        indicator.classList.add('net-bad'); // Червоний
+    }
+}
+// Перевіряємо при старті та кожні 10 секунд
+window.addEventListener('online', updateNetworkStatus);
+window.addEventListener('offline', updateNetworkStatus);
+setInterval(updateNetworkStatus, 10000);
+setTimeout(updateNetworkStatus, 1000);
+// ==========================================
+
+// ==========================================
+// [ДОДАНО] ФУНКЦІЯ ГЛОБАЛЬНОГО СКИДАННЯ ТА ПРОЩАННЯ
+// ==========================================
+window.resetToNavigator = function() {
+    // 1. Вимикаємо радар
+    if (window.isRadarActive && window.toggleRadar) { 
+        window.toggleRadar(false); 
+        if (document.getElementById('ai-radar-toggle')) document.getElementById('ai-radar-toggle').checked = false; 
+    }
+    // 2. Скидаємо балабола/друга до стандарту
+    window.currentMode = "DEFAULT";
+    // 3. Ховаємо навігаційні стрілки
+    document.getElementById('navigation-container').style.display = 'none';
+    if(window.recognition && window.speak) window.speak("Режим штурмана активовано.");
+};
+
+window.playChimeJingle = function() {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const t = ctx.currentTime;
+        const playTone = (freq, start, duration) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, start);
+            gain.gain.setValueAtTime(0, start);
+            gain.gain.linearRampToValueAtTime(0.5, start + 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.start(start); osc.stop(start + duration);
+        };
+        playTone(329.63, t, 0.2);       // Мі
+        playTone(392.00, t + 0.15, 0.25); // Соль
+        playTone(523.25, t + 0.3, 0.5);   // До
+    } catch(e) {}
+};
+// ==========================================
+
+
 // 2. ФУНКЦІЇ ІНТЕРФЕЙСУ (ЗАХИЩЕНИЙ МОБІЛЬНИЙ FULLSCREEN)
 function toggleFullScreen(enable) {
     try {
@@ -130,25 +200,22 @@ if (closeMapBtn) {
     });
 }
 
-if (saveSettingsBtn) {
-    saveSettingsBtn.addEventListener('click', () => {
-        if (apiKeyInput) {
-            const key = apiKeyInput.value.trim();
-            if (key) localStorage.setItem('gemini_api_key', key);
+// ==========================================
+// [ДОДАНО] КНОПКА ЗАПУСКУ РАДАРА В НАЛАШТУВАННЯХ
+// ==========================================
+const launchRadarBtn = document.getElementById('launch-radar-btn');
+if (launchRadarBtn) {
+    launchRadarBtn.addEventListener('click', () => {
+        if (window.toggleRadar) {
+            window.toggleRadar(true);
+            if (radarToggleCheckbox) radarToggleCheckbox.checked = true;
         }
-        if (radarToggleCheckbox && window.toggleRadar) {
-            if (radarToggleCheckbox.checked !== window.isRadarActive) {
-                window.toggleRadar(radarToggleCheckbox.checked);
-            }
-        }
-        saveSettingsBtn.innerText = "✅ Збережено!"; 
-        setTimeout(() => { 
-            if (settingsModal) settingsModal.classList.add('hidden'); 
-            saveSettingsBtn.innerText = "Зберегти"; 
-            resetInactivityTimer();
-        }, 1000);
+        if (settingsModal) settingsModal.classList.add('hidden');
+        resetInactivityTimer();
     });
 }
+// ==========================================
+
 
 if (saveSettingsBtn) {
     saveSettingsBtn.addEventListener('click', () => {
@@ -164,7 +231,7 @@ if (saveSettingsBtn) {
         saveSettingsBtn.innerText = "✅ Збережено!"; 
         setTimeout(() => { 
             if (settingsModal) settingsModal.classList.add('hidden'); 
-            saveSettingsBtn.innerText = "Зберегти"; 
+            saveSettingsBtn.innerText = "Зберегти API"; 
             resetInactivityTimer();
         }, 1000);
     });
@@ -292,10 +359,6 @@ if (navigator.geolocation) {
             } else {
                 if (window.gpsSpeed <= 7) {
                     if (window.jamStartTime === 0) window.jamStartTime = Date.now();
-                    else if (Date.now() - window.jamStartTime > 180000 && !window.isJamZenActive) { 
-                        window.isJamZenActive = true; window.currentMode = "CHATTERBOX";
-                        if(window.speak) window.speak("Схоже, ми застрягли у заторі. Щоб не нудьгувати, я вмикаю режим балабола.");
-                    }
                 } else { window.jamStartTime = 0; window.isJamZenActive = false; }
 
                 if (speedKmh >= 100 && !window.said100) { if(window.speak) window.speak("Попереду можуть бути камери, скинь швидкість!"); window.said100 = true; } 
