@@ -52,7 +52,9 @@ body {
 .auto-fade { transition: opacity 0.8s ease-in-out; opacity: 0.6; }
 .auto-fade.faded { opacity: 0 !important; pointer-events: none; }
 
-#settings-modal, #map-modal.hidden { display: none !important; }
+/* ВИПРАВЛЕНО: додано .hidden до settings-modal, щоб воно не ховалося назавжди */
+#settings-modal.hidden, #map-modal.hidden { display: none !important; }
+
 #settings-modal { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0, 0, 0, 0.9); display: flex; justify-content: center; align-items: center; z-index: 1000; }
 .modal-content { background-color: #1a1a1a; padding: 25px; border-radius: 15px; border: 2px solid #00FF00; text-align: center; width: 85%; max-width: 400px; color: white; }
 #api-key-input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #555; background-color: #333; color: white; box-sizing: border-box; }
