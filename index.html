@@ -63,6 +63,9 @@
             
             <p>Введіть ваш ключ Gemini API:</p>
             <input type="password" id="api-key-input" placeholder="Вставте ключ сюди...">
+
+            <p style="margin-top: 15px;">Як до вас звертатися?</p>
+            <input type="text" id="driver-name-input" placeholder="Наприклад, Роман..." style="width: 100%; padding: 12px; margin: 5px 0 10px; border-radius: 8px; border: 1px solid #555; background-color: #333; color: white; box-sizing: border-box;">
             
             <hr style="border-color: #444;">
             
@@ -88,7 +91,7 @@
                 • <i>"Стоп / Хватить / Зупинись"</i> - скидання екрана<br>
                 • <i>"Приїхали / До побачення / Кінець"</i> - вимкнути Дусю<br>
                 • <i>"Дуся, радар"</i> - увімкнути ШІ-сканер<br>
-                • <i>"Запам'ятай парковку" / "Де machine?"</i><br>
+                • <i>"Запам'ятай парковку" / "Де машина?"</i><br>
                 <br>
                 <b style="color: #0f0;">З ШІ-КЛЮЧЕМ (Gemini AI):</b><br>
                 • <i>"Дуся, [питання]"</i> - розумна відповідь<br>
@@ -119,5 +122,18 @@
     <script src="navigator.js?v=10.0"></script>
     <script src="dusya-brain.js?v=10.0"></script>
     <script src="app.js?v=10.0"></script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const nameInput = document.getElementById('driver-name-input');
+            const saveBtn = document.getElementById('save-settings-btn');
+            if (nameInput) nameInput.value = localStorage.getItem('dusya_driver_name') || "";
+            if (saveBtn) {
+                saveBtn.addEventListener('click', () => {
+                    if (nameInput) localStorage.setItem('dusya_driver_name', nameInput.value.trim());
+                });
+            }
+        });
+    </script>
 </body>
 </html>
