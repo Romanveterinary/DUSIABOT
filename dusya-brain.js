@@ -109,7 +109,7 @@ window.playUFOLoop = function() {
 
 // --- 2. СИНТЕЗАТОР МОВИ ---
 window.speak = function(text, onEndCallback = null) {
-    if (window.isRadarActive) {
+    if (window.isRadarActive || window.isDashcamActive) {
         if (onEndCallback) onEndCallback();
         return; 
     }
@@ -146,7 +146,7 @@ window.speak = function(text, onEndCallback = null) {
             window.playChime(); 
             if (onEndCallback) {
                 onEndCallback();
-            } else if (window.isListening && !window.isRadarActive && !window.speechSynthesis.speaking && !window.isRecordingNote && !window.isWaitingForCleanupConfirm) {
+            } else if (window.isListening && !window.isRadarActive && !window.isDashcamActive && !window.speechSynthesis.speaking && !window.isRecordingNote && !window.isWaitingForCleanupConfirm) {
                 try { 
                     window.recognition.start(); 
                     if (dusyaGlow) dusyaGlow.className = 'glow-green'; 
@@ -154,7 +154,7 @@ window.speak = function(text, onEndCallback = null) {
             }
         };
         utterance.onerror = () => { 
-            if (window.isListening && !window.isRadarActive && !window.isRecordingNote) { 
+            if (window.isListening && !window.isRadarActive && !window.isDashcamActive && !window.isRecordingNote) { 
                 try { 
                     window.recognition.start(); 
                     if (dusyaGlow) dusyaGlow.className = 'glow-green'; 
@@ -234,11 +234,9 @@ if (SpeechRecognition) {
 
     window.recognition.onresult = async (event) => {
         const last = event.results.length - 1;
-        // Очищаємо транскрипт від зайвих пробілів та переводимо в нижній регістр
         const rawTranscript = event.results[last][0].transcript.toLowerCase().trim();
         console.log("Дуся почула: ", rawTranscript);
         
-        // Санітарна обробка: видаляємо слова-паразити для чистого аналізу
         const transcript = rawTranscript.replace(/(ану|давай|швидко|будь ласка|зараз|скажи|мені)/g, ' ').replace(/\s+/g, ' ').trim();
 
         const dusyaGlow = document.getElementById('dusya-glow');
@@ -291,9 +289,7 @@ if (SpeechRecognition) {
             return;
         }
 
-        // ==========================================
         // АБСОЛЮТНИЙ ПРІОРИТЕТ 2: ДІАЛОГ ПРО МАШИНУ ЧАСУ
-        // ==========================================
         if (window.isAskingForYear) {
             let yearMatch = transcript.match(/\b(19\d\d|20\d\d)\b/);
             if (yearMatch) {
@@ -315,9 +311,7 @@ if (SpeechRecognition) {
             return;
         }
 
-        // ==========================================
         // 1. ПЕРЕВІРКА: ЧИ ДО ДУСІ ЗВЕРТАЮТЬСЯ?
-        // ==========================================
         let isAddressed = transcript.includes("дуся") || window.isWaitingForCommand;
 
         if (transcript.includes("дуся") && !window.isWaitingForCommand) { 
@@ -325,9 +319,7 @@ if (SpeechRecognition) {
             window.playPing(); 
         }
 
-        // ==========================================
-        // 2. ВИНЯТКИ ДЛЯ ДІАЛОГІВ (Ігнорують щит isAddressed)
-        // ==========================================
+        // 2. ВИНЯТКИ ДЛЯ ДІАЛОГІВ
         if (window.isWaitingForCleanupConfirm) {
             if (transcript.match(/(так|очистити|видалити)/i)) {
                 localStorage.removeItem('dusya_notes'); localStorage.removeItem('dusya_parking');
@@ -354,9 +346,7 @@ if (SpeechRecognition) {
             return; 
         }
 
-        // ==========================================
-        // ГОЛОВНИЙ ЩИТ: ЯКЩО НЕ БУЛО "ДУСЯ" АБО ЗАПИТАННЯ - ІГНОРУЄМО!
-        // ==========================================
+        // ГОЛОВНИЙ ЩИТ
         if (!isAddressed) return;
 
         // ПРОЩАННЯ
@@ -395,6 +385,14 @@ if (SpeechRecognition) {
             return;
         }
 
+        // [ДОДАНО] ВІДЕОРЕЄСТРАТОР
+        if (transcript.match(/(реєстратор|включи камеру|відеореєстратор|запис відео)/i)) {
+            if (window.toggleDashcam) {
+                window.toggleDashcam(true);
+            }
+            return;
+        }
+
         // МОВНІ КОМАНДИ
         if (transcript.match(/(english version|speak english|англійськ)/i)) { window.currentLanguage = 'en-US'; window.speak("English mode activated."); return; }
         if (transcript.match(/(fala portugu|португальськ)/i)) { window.currentLanguage = 'pt-PT'; window.speak("Modo português ativado."); return; }
@@ -425,17 +423,13 @@ if (SpeechRecognition) {
 
         // ШПАРГАЛКА
         if (transcript.match(/(що ти вмієш|розкажи команди|що ти можеш|допомога)/i)) {
-            window.speak("Я працюю локально. Скажи 'Включи Ютуб' для музики. Скажи 'Запам'ятай парковку'. Скажи 'Покажи заправки' для мапи. Скажи 'Запиши замітку' для сейфа. Або скажи 'Режим друга' для ШІ розмови."); 
+            window.speak("Я працюю локально. Скажи 'Включи Ютуб' для музики. Скажи 'Реєстратор' для камери. Скажи 'Покажи заправки' для мапи. Або скажи 'Режим друга' для розмови."); 
             return;
         }
 
-        // ==========================================
-        // [ОНОВЛЕНО] РОЗУМНІ ЛОКАЛЬНІ КОМАНДИ (Пошук за наміром)
-        // ==========================================
-
-        // YOUTUBE (Будь-яке "включи", "відкрий", "знайди")
+        // YOUTUBE
         let ytMatch = transcript.match(/(?:включи|відкрий|знайди|вруби|постав|запусти)\s+(?:ютуб|пісн|музик|трек|відео)?\s*(.*)/i);
-        if (ytMatch && ytMatch[1] && ytMatch[1].trim() !== "радар" && ytMatch[1].trim() !== "автогід") {
+        if (ytMatch && ytMatch[1] && ytMatch[1].trim() !== "радар" && ytMatch[1].trim() !== "автогід" && ytMatch[1].trim() !== "реєстратор") {
             let ytQuery = ytMatch[1].trim(); 
             window.speak(`Відкриваю ${ytQuery}.`); 
             window.openYouTubeApp(ytQuery); 
@@ -467,15 +461,13 @@ if (SpeechRecognition) {
             let target = routeMatch[1].trim().replace("дуся", "").trim(); 
             if (target.length > 0) {
                 let book = JSON.parse(localStorage.getItem('dusya_address_book') || '{}');
-                // Шукаємо, чи є таке слово в адресній книзі
                 let foundInBook = Object.keys(book).find(key => target.includes(key.toLowerCase()));
                 
                 if (foundInBook && window.startSmartNavigation) {
                     window.startSmartNavigation(foundInBook);
                 } else {
-                    // Розумний фоллбек: якщо адреси немає в книзі, кидаємо в Гугл Карти
                     window.speak(`Відкриваю карти, маршрут до ${target}.`);
-                    window.open(`https://www.google.com/maps/dir/?api=1&destination=$${encodeURIComponent(target)}${window.isBikeMode ? '&travelmode=bicycling' : ''}`, '_blank');
+                    window.open(`https://www.google.com/maps/dir/?api=1&destination=$$${encodeURIComponent(target)}${window.isBikeMode ? '&travelmode=bicycling' : ''}`, '_blank');
                 }
                 return;
             }
@@ -537,9 +529,7 @@ if (SpeechRecognition) {
             window.playMagicSound(); window.speak("Ого, який важливий пасажир на борту! Привіт, Уля! Пристебни пасок, зараз буде магія!", () => { window.openYouTubeApp("сучасна музика для підлітків дівчаток 12 років"); }); return;
         }
 
-        // ==========================================
         // ЯКЩО ЖОДНА ЛОКАЛЬНА КОМАНДА НЕ СПРАЦЮВАЛА
-        // ==========================================
         clearTimeout(window.waitingTimer); window.isWaitingForCommand = false;
         let cleanQuery = transcript;
         
@@ -576,7 +566,7 @@ if (SpeechRecognition) {
     };
 
     window.recognition.onend = () => { 
-        if (window.isListening && !window.isRadarActive && !window.speechSynthesis.speaking && !window.isRecordingNote && !window.isWaitingForCleanupConfirm) { 
+        if (window.isListening && !window.isRadarActive && !window.isDashcamActive && !window.speechSynthesis.speaking && !window.isRecordingNote && !window.isWaitingForCleanupConfirm) { 
             try { window.recognition.start(); } catch(e) {} 
         } 
     };
@@ -601,9 +591,9 @@ if (SpeechRecognition) {
         }
     }
 
-    // [ОНОВЛЕНО] АГРЕСИВНИЙ 5-СЕКУНДНИЙ СТОРОЖ (Захист від "заморозки")
+    // АГРЕСИВНИЙ 5-СЕКУНДНИЙ СТОРОЖ (Заблоковано для реєстратора)
     setInterval(() => {
-        if (window.isListening && !window.isRadarActive && !window.speechSynthesis.speaking && !window.isRecordingNote && !window.isWaitingForCleanupConfirm && !window.isAskingForYear) {
+        if (window.isListening && !window.isRadarActive && !window.isDashcamActive && !window.speechSynthesis.speaking && !window.isRecordingNote && !window.isWaitingForCleanupConfirm && !window.isAskingForYear) {
             try {
                 window.recognition.start();
                 const glow = document.getElementById('dusya-glow');
