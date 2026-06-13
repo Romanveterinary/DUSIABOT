@@ -108,7 +108,7 @@ function getDistance(lat1, lon1, lat2, lon2) {
 }
 
 // ==========================================
-// [ОНОВЛЕНО] ВЕКТОРНІ 3D СТРІЛКИ ТА ДИСТАНЦІЇ
+// ВЕКТОРНІ 3D СТРІЛКИ ТА ДИСТАНЦІЇ
 // ==========================================
 function updateHUD(maneuver, distance) {
     const navContainer = document.getElementById('navigation-container');
@@ -191,15 +191,25 @@ window.startSmartNavigation = async function(targetName) {
 
     if (window.speak) window.speak(`Будую маршрут до точки ${targetName}.`);
     try {
-        let url = `https://router.project-osrm.org/route/v1/driving/${window.currentLon},${window.currentLat}?steps=true&geometries=geojson&overview=false`;
-        let res = await fetch(url); let data = await res.json();
+        // [ВИПРАВЛЕНО] Додано координати цілі (target.lon, target.lat) через крапку з комою
+        let url = `https://router.project-osrm.org/route/v1/driving/${window.currentLon},${window.currentLat};${target.lon},${target.lat}?steps=true&geometries=geojson&overview=false`;
+        
+        let res = await fetch(url); 
+        let data = await res.json();
+        
         if (data.routes && data.routes.length > 0) {
-            window.currentRouteSteps = data.routes[0].legs[0].steps; window.currentStepIndex = 0; window.isSmartNavActive = true;
+            window.currentRouteSteps = data.routes[0].legs[0].steps; 
+            window.currentStepIndex = 0; 
+            window.isSmartNavActive = true;
             if (window.navigationInterval) clearInterval(window.navigationInterval);
             window.navigationInterval = setInterval(window.processNavigation, 1000); 
             if (window.speak) window.speak("Маршрут побудовано. Рушаємо!");
+        } else {
+            if (window.speak) window.speak("Не вдалося знайти дорогу до цієї точки.");
         }
-    } catch(e) { if (window.speak) window.speak("Проблема з сервером навігації."); }
+    } catch(e) { 
+        if (window.speak) window.speak("Проблема з сервером навігації."); 
+    }
 };
 
 // --- 4. ІНШІ ФУНКЦІЇ ---
@@ -228,16 +238,13 @@ window.checkLocationAndZone = async function() {
                 let speedLimit = isCurrentlyInCity ? 50 : 90;
                 if (window.speak) window.speak(`Системи активовано. Пристебніть пасок безпеки. Ми в районі ${place || "невідомо"}. Дозволена швидкість ${speedLimit}.`);
             } else {
-                window.isInCityZone = isCurrentlyInCity; // Оновлюємо статус зони під час їзди
+                window.isInCityZone = isCurrentlyInCity; 
             }
 
-            // ==========================================
-            // [ДОДАНО] ЛОГІКА АВТОГІДА
-            // ==========================================
+            // ЛОГІКА АВТОГІДА
             if (window.isAutoTourGuide && place) {
                 let distSinceLastTour = window.lastTourLat ? getDistance(window.currentLat, window.currentLon, window.lastTourLat, window.lastTourLon) : 99999;
                 
-                // Якщо від'їхали на 5 км АБО змінився населений пункт
                 if (distSinceLastTour >= 5000 || window.lastTourPlace !== place) {
                     window.lastTourLat = window.currentLat;
                     window.lastTourLon = window.currentLon;
@@ -252,7 +259,6 @@ window.checkLocationAndZone = async function() {
                     }
                 }
             }
-            // ==========================================
         }
     } catch(e) {}
 };
