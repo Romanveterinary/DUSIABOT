@@ -242,7 +242,7 @@ if (SpeechRecognition) {
         const dusyaGlow = document.getElementById('dusya-glow');
 
         // ==========================================
-        // [ОНОВЛЕНО] АБСОЛЮТНИЙ ПРІОРИТЕТ 1: ІДЕАЛЬНИЙ РУБИЛЬНИК З ПІДТВЕРДЖЕННЯМ
+        // АБСОЛЮТНИЙ ПРІОРИТЕТ 1: ІДЕАЛЬНИЙ РУБИЛЬНИК З ПІДТВЕРДЖЕННЯМ
         // ==========================================
         let isStopCommand = transcript.match(/(стоп|завершити|хватить|закрийся|не пизди|тихо|вимкни звук|зупинись)/i);
         let isQuietCommand = transcript.match(/(мовчи|замовкни|помовчи)/i);
@@ -400,7 +400,7 @@ if (SpeechRecognition) {
         if (transcript.match(/(fala portugu|португальськ)/i)) { window.currentLanguage = 'pt-PT'; window.speak("Modo português ativado."); return; }
         if (transcript.match(/(українська мова|поверни українську)/i)) { window.currentLanguage = 'uk-UA'; window.speak("Українську мову відновлено."); return; }
 
-        // АВТОГІД (Активація)
+        // АВТОГІД 
         if (transcript.match(/(режим автогід|включи автогід|авто гід)/i)) {
             window.isAutoTourGuide = true; 
             if (window.recognition) window.recognition.stop();
@@ -530,7 +530,7 @@ if (SpeechRecognition) {
         if (transcript.includes("яка швидкість")) { if (window.recognition) window.recognition.stop(); window.speak(`Зараз наша швидкість ${window.gpsSpeed || 0}.`); return; }
 
         let weatherMatch = transcript.match(/погода\s+(?:в|у)\s+([а-яєіїґ-]+)/i);
-        if (transcript.includes("погода")) { 
+        if (transcript.includes("pogoda") || transcript.includes("погода")) { 
             let city = weatherMatch ? weatherMatch[1] : null; 
             if (window.handleWeatherCommand) window.handleWeatherCommand(city); return; 
         }
@@ -589,13 +589,13 @@ if (SpeechRecognition) {
         } 
     };
     
-    // [ОНОВЛЕНО] Функція для безперервного циклу Балабола (Із примусовим вмиканням вух)
+    // Функція для безперервного циклу Балабола (Із примусовим вмиканням вух)
     async function triggerChatterboxLoop() {
         if (window.currentMode !== "CHATTERBOX" || !window.isListening) return;
         window.isWaitingForCommand = false;
         if (window.recognition) window.recognition.stop();
         
-        const aiResponse = await window.askDusyaAI("Водій мовчить. Продовжуй розмову сама! Розкажи смішну історію з життя, цікавий факт, анекдот або новину, ніби ти справжня балакуча жінка. І в кінці знову запитай щось у водія.");
+        const aiResponse = await window.askDusyaAI("Водій мовчить. Продовжуй розмову сама! Розкажи смішну історію з життя, цікавий факт, анекдот або новину, ніби ти справжня балакуча жінка. І в кінці знову запитай щось у водійки.");
         if (aiResponse) {
             window.speak(aiResponse, () => {
                 if (window.currentMode === "CHATTERBOX") {
@@ -611,4 +611,17 @@ if (SpeechRecognition) {
             });
         }
     }
+
+    // 10-СЕКУНДНИЙ СТОРОЖ Запуск фонового таймера, який страхує від залипань та сну мікрофона
+    setInterval(() => {
+        if (window.isListening && !window.isRadarActive && !window.speechSynthesis.speaking && !window.isRecordingNote && !window.isWaitingForCleanupConfirm && !window.isAskingForYear) {
+            try {
+                window.recognition.start();
+                const glow = document.getElementById('dusya-glow');
+                if (glow && glow.className === '') glow.className = 'glow-green';
+            } catch(e) {
+                // Вже запущено
+            }
+        }
+    }, 10000);
 }
