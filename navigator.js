@@ -244,7 +244,7 @@ window.startSmartNavigation = async function(targetName) {
         let data = await res.json();
         
         if (data.routes && data.routes.length > 0) {
-            // Фіксуємо початкові глобальні дані всього шляху для розрахунку ETA
+            // Фиксуємо початкові глобальні дані всього шляху для розрахунку ETA
             window.initialRouteDistance = data.routes[0].distance;
             window.initialRouteDuration = data.routes[0].duration;
 
@@ -263,7 +263,9 @@ window.startSmartNavigation = async function(targetName) {
 };
 
 // --- 4. ІНШІ ФУНКЦІЇ ---
-window.searchLocalPlaces = function(query) { window.open(`http://googleusercontent.com/maps.google.com/?q=${encodeURIComponent(query)}`, '_blank'); };
+window.searchLocalPlaces = function(query) { 
+    window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`, '_blank'); 
+};
 
 window.saveParking = function(lat, lon) {
     if (lat && lon) { localStorage.setItem('dusya_parking', JSON.stringify({lat, lon})); if (window.speak) window.speak("Координати парковки збережено."); }
@@ -271,7 +273,10 @@ window.saveParking = function(lat, lon) {
 
 window.findCar = function() {
     let pData = localStorage.getItem('dusya_parking');
-    if (pData) { let p = JSON.parse(pData); window.open(`http://googleusercontent.com/maps.google.com/?daddr=${p.lat},${p.lon}&dirflg=w`, '_blank'); } 
+    if (pData) { 
+        let p = JSON.parse(pData); 
+        window.open(`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}&travelmode=walking`, '_blank'); 
+    } 
     else { if (window.speak) window.speak("Я не пам'ятаю парковку."); }
 };
 
