@@ -108,6 +108,9 @@ function getDistance(lat1, lon1, lat2, lon2) {
 }
 
 function updateHUD(maneuver, distance) {
+    // ЖОРСТКИЙ БЛОК: Якщо режим штурмана скасовано - не відображати стрілку
+    if (!window.isSmartNavActive) return; 
+
     const navContainer = document.getElementById('navigation-container');
     const navArrow = document.getElementById('nav-arrow');
     const navDistance = document.getElementById('nav-distance');
@@ -156,7 +159,36 @@ function updateHUD(maneuver, distance) {
 }
 
 // --- 3. ЦИКЛ НАВІГАЦІЇ ТА ПРОКЛАДАННЯ МАРШРУТУ ---
+
+// [НОВА] Жорстка зупинка всіх навігаційних процесів
+window.stopSmartNavigation = function() {
+    window.isSmartNavActive = false;
+    window.currentRouteSteps = [];
+    window.currentStepIndex = 0;
+    
+    if (window.navigationInterval) {
+        clearInterval(window.navigationInterval);
+        window.navigationInterval = null;
+    }
+    
+    // Приховуємо стрілку
+    const navContainer = document.getElementById('navigation-container');
+    if (navContainer) navContainer.style.display = 'none';
+    
+    // Приховуємо прогрес бар
+    const topPanel = document.getElementById('route-top-panel');
+    if (topPanel) topPanel.style.display = 'none';
+    
+    // Очищуємо текстові поля
+    const totalDistElem = document.getElementById('total-route-distance');
+    if (totalDistElem) totalDistElem.innerText = '-- км';
+    
+    const etaElem = document.getElementById('eta-display');
+    if (etaElem) etaElem.innerText = 'Прибуття: --:--';
+};
+
 window.processNavigation = function() {
+    // Додатковий захист від фантомних спрацьовувань
     if (!window.isSmartNavActive || window.currentRouteSteps.length === 0 || !window.currentLat || !window.currentLon) return;
     
     let step = window.currentRouteSteps[window.currentStepIndex];
@@ -167,15 +199,7 @@ window.processNavigation = function() {
     if (distToStep <= 25) {
         window.currentStepIndex++;
         if (window.currentStepIndex >= window.currentRouteSteps.length) {
-            window.isSmartNavActive = false; 
-            clearInterval(window.navigationInterval);
-            
-            const container = document.getElementById('navigation-container');
-            if (container) container.style.display = 'none';
-            
-            const progressContainer = document.getElementById('route-progress-container');
-            if (progressContainer) progressContainer.style.display = 'none';
-
+            window.stopSmartNavigation(); // Замінив на виклик нової функції очищення
             if (window.speak) window.speak("Маршрут завершено. Ви прибули до місця призначення.");
             return;
         }
@@ -216,7 +240,6 @@ window.processNavigation = function() {
             etaElem.innerText = `Прибуття: ${hours}:${minutes}`;
         }
 
-        // --- ЛОГІКА СМУГИ ПРОГРЕСУ ---
         let progressPercent = 100 - (ratio * 100);
         if (progressPercent < 0) progressPercent = 0;
         if (progressPercent > 100) progressPercent = 100;
@@ -236,12 +259,17 @@ window.startSmartNavigation = async function(targetName) {
     if (!target) { if (window.speak) window.speak(`Точку ${targetName} не знайдено в книзі.`); return; }
     if (!window.currentLat || !window.currentLon) { if (window.speak) window.speak("Чекаю сигнал GPS."); return; }
 
+    window.isSmartNavActive = true; // Фіксуємо одразу намір їхати
     if (window.speak) window.speak(`Будую маршрут до точки ${targetName}.`);
+    
     try {
         let url = `https://router.project-osrm.org/route/v1/driving/${window.currentLon},${window.currentLat};${target.lon},${target.lat}?steps=true&geometries=geojson&overview=false`;
         
         let res = await fetch(url); 
         let data = await res.json();
+        
+        // ЗАХИСТ: Якщо під час запиту до сервера користувач сказав "Стоп" - скасовуємо все
+        if (!window.isSmartNavActive) return; 
         
         if (data.routes && data.routes.length > 0) {
             window.initialRouteDistance = data.routes[0].distance;
@@ -249,11 +277,10 @@ window.startSmartNavigation = async function(targetName) {
 
             window.currentRouteSteps = data.routes[0].legs[0].steps; 
             window.currentStepIndex = 0; 
-            window.isSmartNavActive = true;
             
-            const progressContainer = document.getElementById('route-progress-container');
+            const topPanel = document.getElementById('route-top-panel');
             const progressBar = document.getElementById('route-progress-bar');
-            if (progressContainer) progressContainer.style.display = 'block';
+            if (topPanel) topPanel.style.display = 'block';
             if (progressBar) progressBar.style.width = '0%';
 
             if (window.navigationInterval) clearInterval(window.navigationInterval);
