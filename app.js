@@ -22,7 +22,7 @@
     }
 })();
 
-console.log("Запуск Дусі v9.0: Фікс стрілки та прогрес бар з кілометрами");
+console.log("Запуск Дусі v9.5: Гнучкі команди та захист мікрофона");
 
 // 1. ГЛОБАЛЬНІ ЗМІННІ ТА ЕЛЕМЕНТИ
 const speedElement = document.getElementById('speed-display');
@@ -71,19 +71,26 @@ window.addEventListener('offline', updateNetworkStatus);
 setInterval(updateNetworkStatus, 10000);
 setTimeout(updateNetworkStatus, 1000);
 
-// --- ЗАХИСТ ВІД ЗАВИСАННЯ (Повернення з Ютубу) ---
+// ==========================================
+// [ОНОВЛЕНО] ПОСИЛЕНИЙ ЗАХИСТ ВІД ЗАВИСАННЯ
+// ==========================================
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && window.isListening && !window.isRadarActive && window.recognition) {
         try {
-            window.recognition.abort(); 
-            setTimeout(() => {
-                window.recognition.start();
-                if (window.speak) window.speak("Я знову тут.");
-                if (dusyaGlow) dusyaGlow.className = 'glow-green';
-            }, 500);
+            window.recognition.abort(); // Жорстко вбиваємо зламаний старий процес
         } catch(e) {}
+        
+        // Даємо телефону 1.5 секунди (замість 0.5), щоб точно звільнити мікрофон після Ютубу
+        setTimeout(() => {
+            try {
+                window.recognition.start();
+                if (window.speak) window.speak("Я знову на зв'язку.");
+                if (dusyaGlow) dusyaGlow.className = 'glow-green';
+            } catch(e) {}
+        }, 1500); 
     }
 });
+// ==========================================
 
 // --- ФУНКЦІЯ ГЛОБАЛЬНОГО СКИДАННЯ ---
 window.resetToNavigator = function() {
@@ -94,11 +101,9 @@ window.resetToNavigator = function() {
     window.currentMode = "DEFAULT";
     window.isTimeWarping = false;
     
-    // [ОНОВЛЕНО] Жорстке придушення навігації (викликає функцію з navigator.js)
     if (window.stopSmartNavigation) {
         window.stopSmartNavigation();
     } else {
-        // Фоллбек, якщо щось пішло не так
         document.getElementById('navigation-container').style.display = 'none';
         const topPanel = document.getElementById('route-top-panel');
         if (topPanel) topPanel.style.display = 'none';
@@ -309,7 +314,6 @@ if (dusyaBtn) {
             if (window.recognition) window.recognition.stop(); 
             keepAliveAudio.pause();
             
-            // Виклик жорсткого скидання при вимкненні
             if (window.resetToNavigator) window.resetToNavigator();
             
             window.chatHistory = []; 
