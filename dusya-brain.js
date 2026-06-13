@@ -205,7 +205,6 @@ window.askDusyaAI = async function(userQuestion) {
     window.chatHistory.push({ role: "user", parts: [{ text: userQuestion }] });
     if (window.chatHistory.length > 10) window.chatHistory = window.chatHistory.slice(-10);
 
-    // [ВИПРАВЛЕНО]: Таймер збільшено до 20 секунд, щоб ШІ встигав подумати над складними питаннями
     const timeoutId = setTimeout(() => currentAbortController.abort(), 20000);
 
     try {
@@ -273,7 +272,6 @@ if (SpeechRecognition) {
             window.playPing(); 
             if(window.resetToNavigator) window.resetToNavigator();
             
-            // [ВИПРАВЛЕНО]: Мікро-пауза, щоб браузер не ковтав фразу підтвердження
             setTimeout(() => {
                 if (window.currentMode === "CHATTERBOX") {
                     window.currentMode = "DEFAULT";
@@ -284,7 +282,7 @@ if (SpeechRecognition) {
                     if (isQuietCommand) {
                         window.speak("Зрозуміла. Переходжу в режим тиші.");
                     } else {
-                        window.speak("Зрозуміла. Усі процеси зупинено. Режим штурмана.");
+                        window.speak("Зрозуміла. Режим штурмана."); // Залізне підтвердження
                     }
                 }
             }, 100);
@@ -403,7 +401,7 @@ if (SpeechRecognition) {
         // АВТОГІД 
         if (transcript.match(/(режим автогід|включи автогід|авто гід)/i)) {
             window.isAutoTourGuide = true; 
-            window.speak("Режим автогіда увімкнено. Буду розповідати цікаві факти про місця, які мы проїжджаємо.");
+            window.speak("Режим автогіда увімкнено. Буду розповідати цікаві факти про місця, які ми проїжджаємо.");
             return;
         }
 
@@ -420,7 +418,7 @@ if (SpeechRecognition) {
             return;
         }
 
-        // YOUTUBE
+        // YOUTUBE (Працює 100% локально)
         let ytMatch = transcript.match(/(?:включи|відкрий|знайди)\s+(?:пісню|музику|в ютубі|на ютубі|ютуб)?\s*(.*)/i);
         if (ytMatch && (transcript.includes("ютуб") || transcript.includes("включи") || transcript.includes("пісню") || transcript.includes("відкрий"))) {
             let ytQuery = ytMatch[1] ? ytMatch[1].trim() : ""; 
@@ -441,7 +439,7 @@ if (SpeechRecognition) {
             if (window.saveParking) window.saveParking(window.currentLat, window.currentLon);
             return;
         }
-        if (transcript.match(/(де моя machine|знайди машину|де машина|де стоянка|дорогу до машини|покажи дорогу назад)/i)) {
+        if (transcript.match(/(де моя машина|знайди машину|де машина|де стоянка|дорогу до машини|покажи дорогу назад)/i)) {
             if (window.findCar) window.findCar();
             return;
         }
@@ -541,7 +539,9 @@ if (SpeechRecognition) {
         if (transcript.includes("колір синій")) { document.documentElement.style.setProperty('--hud-color', '#00BFFF'); window.speak("Колір синій."); return; }
 
 
-        // ЯКЩО ЖОДНА ЛОКАЛЬНА КОМАНДА НЕ СПРАЦЮВАЛА -> ПИТАЄМО ШТУЧНИЙ ІНТЕЛЕКТ
+        // ==========================================
+        // ЯКЩО ЖОДНА ЛОКАЛЬНА КОМАНДА НЕ СПРАЦЮВАЛА
+        // ==========================================
         clearTimeout(window.waitingTimer); window.isWaitingForCommand = false;
         let cleanQuery = transcript;
         
@@ -550,18 +550,24 @@ if (SpeechRecognition) {
         }
 
         if (cleanQuery.length > 0) {
-            if (dusyaGlow) dusyaGlow.className = 'glow-yellow'; 
-            
-            const aiResponse = await window.askDusyaAI(cleanQuery);
-            if (aiResponse) {
-                window.speak(aiResponse);
-
-                if (window.currentMode === "CHATTERBOX") {
-                    window.isWaitingForCommand = true; clearTimeout(window.waitingTimer);
-                    window.waitingTimer = setTimeout(triggerChatterboxLoop, 5000); 
-                }
-            } else {
+            // [ОНОВЛЕНО] ЖОРСТКИЙ ПРІОРИТЕТ: Якщо режим штурмана (DEFAULT), ШІ ігнорується
+            if (window.currentMode === "DEFAULT") {
+                window.speak("Команду не розпізнано. Я в локальному режимі.");
                 if (dusyaGlow) dusyaGlow.className = 'glow-green';
+            } else {
+                if (dusyaGlow) dusyaGlow.className = 'glow-yellow'; 
+                
+                const aiResponse = await window.askDusyaAI(cleanQuery);
+                if (aiResponse) {
+                    window.speak(aiResponse);
+
+                    if (window.currentMode === "CHATTERBOX") {
+                        window.isWaitingForCommand = true; clearTimeout(window.waitingTimer);
+                        window.waitingTimer = setTimeout(triggerChatterboxLoop, 5000); 
+                    }
+                } else {
+                    if (dusyaGlow) dusyaGlow.className = 'glow-green';
+                }
             }
         } else {
             if (dusyaGlow) dusyaGlow.className = 'glow-green'; 
