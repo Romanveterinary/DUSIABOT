@@ -205,7 +205,8 @@ window.askDusyaAI = async function(userQuestion) {
     window.chatHistory.push({ role: "user", parts: [{ text: userQuestion }] });
     if (window.chatHistory.length > 10) window.chatHistory = window.chatHistory.slice(-10);
 
-    const timeoutId = setTimeout(() => currentAbortController.abort(), 7000);
+    // [ВИПРАВЛЕНО]: Таймер збільшено до 20 секунд, щоб ШІ встигав подумати над складними питаннями
+    const timeoutId = setTimeout(() => currentAbortController.abort(), 20000);
 
     try {
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
@@ -242,7 +243,7 @@ if (SpeechRecognition) {
         const dusyaGlow = document.getElementById('dusya-glow');
 
         // ==========================================
-        // АБСОЛЮТНИЙ ПРІОРИТЕТ 1: ІДЕАЛЬНИЙ РУБИЛЬНИК З ПІДТВЕРДЖЕННЯМ
+        // [БЕТОННИЙ РУБИЛЬНИК 1] АВАРІЙНИЙ СТОП
         // ==========================================
         let isStopCommand = transcript.match(/(стоп|завершити|хватить|закрийся|не пизди|тихо|вимкни звук|зупинись)/i);
         let isQuietCommand = transcript.match(/(мовчи|замовкни|помовчи)/i);
@@ -272,17 +273,21 @@ if (SpeechRecognition) {
             window.playPing(); 
             if(window.resetToNavigator) window.resetToNavigator();
             
-            // ПІДТВЕРДЖЕННЯ ДІЇ
-            if (window.currentMode === "CHATTERBOX") {
-                window.currentMode = "DEFAULT";
-                if (window.recognition) window.recognition.stop();
-                let randomInsult = ["Ну і скучний ти. Повертаюсь до навігації.", "Ой, все. Їдь сам у тиші. Режим штурмана.", "Я ж хотіла як краще... Зупиняю процеси."];
-                window.speak(randomInsult[Math.floor(Math.random() * randomInsult.length)]);
-            } else {
-                window.currentMode = "DEFAULT";
-                if (window.recognition) window.recognition.stop();
-                window.speak("Зрозуміла. Усі процеси зупинено. Режим штурмана.");
-            }
+            // [ВИПРАВЛЕНО]: Мікро-пауза, щоб браузер не ковтав фразу підтвердження
+            setTimeout(() => {
+                if (window.currentMode === "CHATTERBOX") {
+                    window.currentMode = "DEFAULT";
+                    let randomInsult = ["Ну і скучний ти. Повертаюсь до навігації.", "Ой, все. Їдь сам у тиші. Режим штурмана.", "Я ж хотіла як краще... Зупиняю процеси."];
+                    window.speak(randomInsult[Math.floor(Math.random() * randomInsult.length)]);
+                } else {
+                    window.currentMode = "DEFAULT";
+                    if (isQuietCommand) {
+                        window.speak("Зрозуміла. Переходжу в режим тиші.");
+                    } else {
+                        window.speak("Зрозуміла. Усі процеси зупинено. Режим штурмана.");
+                    }
+                }
+            }, 100);
             return;
         }
 
@@ -300,7 +305,6 @@ if (SpeechRecognition) {
                 document.documentElement.style.setProperty('--hud-color', '#00FF00');
                 const speedElement = document.getElementById('speed-display');
                 if (speedElement) speedElement.style.fontFamily = "'Courier New', Courier, monospace"; 
-                if (window.recognition) window.recognition.stop(); 
                 window.speak(`Ціль — ${window.targetTimeYear} рік. Розганяйтесь до 90 кілометрів на годину!`);
             } else if (transcript.match(/(скасувати|відміна)/i)) {
                 window.isAskingForYear = false;
@@ -346,7 +350,6 @@ if (SpeechRecognition) {
                     localStorage.setItem('dusya_notes', existingNotes + (existingNotes ? " | " : "") + window.currentNoteText.trim());
                     window.speak("Замітку надійно збережено у сейф.");
                 } else { window.speak("Запис порожній."); }
-                if (window.recognition) { try { window.recognition.stop(); } catch(e){} }
             } else { window.currentNoteText += " " + transcript; }
             return; 
         }
@@ -358,9 +361,7 @@ if (SpeechRecognition) {
 
         // ПРОЩАННЯ
         if (transcript.match(/(приїхали|до побачення|кінець)/i)) {
-            if (window.recognition) window.recognition.stop();
             window.stopAllSounds();
-            
             const now = new Date();
             const dateStr = now.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' });
             const timeStr = now.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
@@ -386,7 +387,6 @@ if (SpeechRecognition) {
 
         // РАДАР
         if (transcript.match(/(радар|включи радар|активуй радар|режим радар)/i)) {
-            if (window.recognition) window.recognition.stop();
             if (window.toggleRadar) {
                 window.toggleRadar(true);
                 const t = document.getElementById('ai-radar-toggle');
@@ -403,7 +403,6 @@ if (SpeechRecognition) {
         // АВТОГІД 
         if (transcript.match(/(режим автогід|включи автогід|авто гід)/i)) {
             window.isAutoTourGuide = true; 
-            if (window.recognition) window.recognition.stop();
             window.speak("Режим автогіда увімкнено. Буду розповідати цікаві факти про місця, які ми проїжджаємо.");
             return;
         }
@@ -411,14 +410,12 @@ if (SpeechRecognition) {
         // РЕЖИМ ДРУГА 
         if (transcript.match(/(режим друга|будь другом|переключи на друга|режим друг)/i)) {
             window.currentMode = "FRIEND";
-            if (window.recognition) window.recognition.stop();
             window.speak("Ввімкнула режим друга. Я на зв'язку, їдемо.");
             return;
         }
 
         // ШПАРГАЛКА
         if (transcript.match(/(що ти вмієш|розкажи команди|команди|що ти можеш|допомога|функції|як тобою керувати)/i)) {
-            if (window.recognition) window.recognition.stop(); 
             window.speak("Я працюю локально. Скажи 'Включи Ютуб' для музики. Скажи 'Запам'ятай парковку', щоб знайти авто. Скажи 'Покажи заправки' для мапи. Скажи 'Запиши замітку' для сейфа. Або скажи 'Режим друга' для приємної розмови."); 
             return;
         }
@@ -427,7 +424,6 @@ if (SpeechRecognition) {
         let ytMatch = transcript.match(/(?:включи|відкрий|знайди)\s+(?:пісню|музику|в ютубі|на ютубі|ютуб)?\s*(.*)/i);
         if (ytMatch && (transcript.includes("ютуб") || transcript.includes("включи") || transcript.includes("пісню") || transcript.includes("відкрий"))) {
             let ytQuery = ytMatch[1] ? ytMatch[1].trim() : ""; 
-            if (window.recognition) window.recognition.stop(); 
             if (ytQuery) { window.speak(`Відкриваю ${ytQuery} на Ютубі.`); window.openYouTubeApp(ytQuery); } 
             else { window.speak("Відкриваю Ютуб."); window.open(`https://www.youtube.com`, '_blank'); }
             return;
@@ -436,19 +432,16 @@ if (SpeechRecognition) {
         // ЛОКАЛЬНИЙ ПОШУК ОБ'ЄКТІВ 
         let mapMatch = transcript.match(/(?:покажи|знайди)\s+(заправки|заправку|кафе|макдональдс|пам'ятки|ресторани|магазини|аптеки|аптеку|туалет|парковки)/i);
         if (mapMatch && mapMatch[1] && window.searchLocalPlaces) {
-            if (window.recognition) window.recognition.stop();
             window.searchLocalPlaces(mapMatch[1].trim());
             return;
         }
 
         // ПАРКУВАЛЬНА ПАМ'ЯТЬ 
         if (transcript.match(/(запам'ятай парковку|запам'ятай машину|я припаркувався|тут залишаю машину|відміть точку парковки|запам'ятай місце)/i)) {
-            if (window.recognition) window.recognition.stop();
             if (window.saveParking) window.saveParking(window.currentLat, window.currentLon);
             return;
         }
         if (transcript.match(/(де моя машина|знайди машину|де машина|де стоянка|дорогу до машини|покажи дорогу назад)/i)) {
-            if (window.recognition) window.recognition.stop();
             if (window.findCar) window.findCar();
             return;
         }
@@ -457,31 +450,28 @@ if (SpeechRecognition) {
         if (transcript.match(/(режим велосипеда|я на велику)/i)) {
             window.isBikeMode = true; document.body.style.backgroundColor = "#004d00"; 
             document.documentElement.style.setProperty('--hud-color', '#00FF00');
-            if(window.recognition) window.recognition.stop();
             window.speak("Вело-штурман активований! Крути педалі, я слідкую за маршрутом і швидкістю."); return;
         }
-        if (transcript.includes("багато людей")) { if(window.recognition) window.recognition.stop(); window.speak("Вмикаю попереджувальний сигнал.", window.playBikeBellLoop); return; }
+        if (transcript.includes("багато людей")) { window.speak("Вмикаю попереджувальний сигнал.", window.playBikeBellLoop); return; }
         if (transcript.match(/(режим нло|космічний корабель)/i)) {
             document.body.style.backgroundColor = "#191970"; 
             document.documentElement.style.setProperty('--hud-color', '#00FFFF'); 
-            if(window.recognition) window.recognition.stop(); window.speak("Гіпер-двигун активовано.", window.playUFOLoop); return;
+            window.speak("Гіпер-двигун активовано.", window.playUFOLoop); return;
         }
 
         // РОЗУМНА АДРЕСНА КНИГА (НАВІГАТОР)
         if (transcript.match(/(маршрут додому|додому|дім|дорога додому|веди додому|поїхали додому)/i)) {
-            if(window.recognition) window.recognition.stop(); 
             if(window.startSmartNavigation) window.startSmartNavigation("дім");
             return;
         }
         let smartNavMatch = transcript.match(/(?:маршрут на|поїхали на|маршрут|дорога на)\s+(роботу|робота\s+\d+|дача|гараж|школа|магазин)/i);
         if (smartNavMatch && smartNavMatch[1]) {
-            if(window.recognition) window.recognition.stop();
             if(window.startSmartNavigation) window.startSmartNavigation(smartNavMatch[1].trim());
             return;
         }
         let routeMatch = transcript.match(/(?:маршрут до|доїхати до|найближча)\s+(.*)/i);
         if (routeMatch && routeMatch[1]) {
-            let target = routeMatch[1]; if(window.recognition) window.recognition.stop(); 
+            let target = routeMatch[1]; 
             window.speak(`Відкриваю карти, будую маршрут до ${target}.`);
             window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(target)}${window.isBikeMode ? '&travelmode=bicycling' : ''}`, '_blank');
             return;
@@ -500,15 +490,14 @@ if (SpeechRecognition) {
                 let secs = String(elapsedSecs % 60).padStart(2, '0');
                 if(timeSpan) timeSpan.innerText = `${mins}:${secs}`;
             }, 1000);
-            if (window.recognition) window.recognition.stop(); window.speak("Слухаю. Коли закінчиш, скажи Кінець."); return;
+            window.speak("Слухаю. Коли закінчиш, скажи Кінець."); return;
         }
-        if (transcript.match(/(прочитай замітки|мої замітки)/i)) { let notes = localStorage.getItem('dusya_notes'); if (window.recognition) window.recognition.stop(); if (notes) window.speak("У сейфі є такі записи: " + notes); else window.speak("Сейф порожній."); return; }
-        if (transcript.match(/(видали всі замітки|очистити сейф)/i)) { localStorage.removeItem('dusya_notes'); if (window.recognition) window.recognition.stop(); window.speak("Сейф порожній, всі замітки видалено."); return; }
+        if (transcript.match(/(прочитай замітки|мої замітки)/i)) { let notes = localStorage.getItem('dusya_notes'); if (notes) window.speak("У сейфі є такі записи: " + notes); else window.speak("Сейф порожній."); return; }
+        if (transcript.match(/(видали всі замітки|очистити сейф)/i)) { localStorage.removeItem('dusya_notes'); window.speak("Сейф порожній, всі замітки видалено."); return; }
 
         // МАШИНА ЧАСУ (Активація)
         if (transcript.match(/(машина часу|назад у майбутнє)/i)) {
             window.isAskingForYear = true;
-            if (window.recognition) window.recognition.stop();
             window.speak("Конденсатор потоку увімкнено. В який рік подорожуємо?");
             return;
         }
@@ -516,7 +505,6 @@ if (SpeechRecognition) {
         // РЕЖИМ БАЛАБОЛА
         if (transcript.match(/(режим балабола|будь балаболом)/i)) {
             window.currentMode = "CHATTERBOX"; 
-            if (window.recognition) window.recognition.stop();
             window.speak("О, це мій улюблений режим! Вмикаю Балабола. Ну що, розкажи, як настрій сьогодні в дорозі?");
             window.isWaitingForCommand = true; clearTimeout(window.waitingTimer); 
             window.waitingTimer = setTimeout(triggerChatterboxLoop, 5000); 
@@ -524,10 +512,10 @@ if (SpeechRecognition) {
         }
         
         // МИТТЄВІ ЛОКАЛЬНІ КОМАНДИ
-        if (transcript.match(/(котра година|який час)/i)) { if (window.recognition) window.recognition.stop(); window.speak(`Зараз ${new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}.`); return; }
-        if (transcript.match(/(яке сьогодні число|яка дата)/i)) { if (window.recognition) window.recognition.stop(); window.speak(`Сьогодні ${new Date().toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' })}.`); return; }
-        if (transcript.match(/(де ми|яке це місто)/i)) { if (window.recognition) window.recognition.stop(); window.speak(`Ми зараз в районі ${window.currentPlaceName || "невідомо"}.`); return; }
-        if (transcript.includes("яка швидкість")) { if (window.recognition) window.recognition.stop(); window.speak(`Зараз наша швидкість ${window.gpsSpeed || 0}.`); return; }
+        if (transcript.match(/(котра година|який час)/i)) { window.speak(`Зараз ${new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}.`); return; }
+        if (transcript.match(/(яке сьогодні число|яка дата)/i)) { window.speak(`Сьогодні ${new Date().toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' })}.`); return; }
+        if (transcript.match(/(де ми|яке це місто)/i)) { window.speak(`Ми зараз в районі ${window.currentPlaceName || "невідомо"}.`); return; }
+        if (transcript.includes("яка швидкість")) { window.speak(`Зараз наша швидкість ${window.gpsSpeed || 0}.`); return; }
 
         let weatherMatch = transcript.match(/погода\s+(?:в|у)\s+([а-яєіїґ-]+)/i);
         if (transcript.includes("pogoda") || transcript.includes("погода")) { 
@@ -537,7 +525,6 @@ if (SpeechRecognition) {
 
         // ПАСХАЛКА ДЛЯ УЛІ
         if (transcript.match(/ул[яюїі]/i) || transcript.includes("улею") || transcript.includes("ульою")) {
-            if (window.recognition) window.recognition.stop();
             document.body.style.backgroundColor = "#4B0082"; 
             document.documentElement.style.setProperty('--hud-color', '#FF1493');
             window.playMagicSound();
@@ -546,11 +533,11 @@ if (SpeechRecognition) {
         }
 
         // СИНХРОНІЗАЦІЯ КОЛЬОРІВ HUD
-        if (transcript.includes("колір червоний")) { document.documentElement.style.setProperty('--hud-color', '#FF0000'); if(window.recognition) window.recognition.stop(); window.speak("Колір червоний."); return; }
-        if (transcript.includes("колір зелений")) { document.documentElement.style.setProperty('--hud-color', '#00FF00'); if(window.recognition) window.recognition.stop(); window.speak("Колір зелений."); return; }
-        if (transcript.includes("колір жовтий")) { document.documentElement.style.setProperty('--hud-color', '#FFFF00'); if(window.recognition) window.recognition.stop(); window.speak("Колір жовтий."); return; }
-        if (transcript.includes("колір білий")) { document.documentElement.style.setProperty('--hud-color', '#FFFFFF'); if(window.recognition) window.recognition.stop(); window.speak("Колір білий."); return; }
-        if (transcript.includes("колір синій")) { document.documentElement.style.setProperty('--hud-color', '#00BFFF'); if(window.recognition) window.recognition.stop(); window.speak("Колір синій."); return; }
+        if (transcript.includes("колір червоний")) { document.documentElement.style.setProperty('--hud-color', '#FF0000'); window.speak("Колір червоний."); return; }
+        if (transcript.includes("колір зелений")) { document.documentElement.style.setProperty('--hud-color', '#00FF00'); window.speak("Колір зелений."); return; }
+        if (transcript.includes("колір жовтий")) { document.documentElement.style.setProperty('--hud-color', '#FFFF00'); window.speak("Колір жовтий."); return; }
+        if (transcript.includes("колір білий")) { document.documentElement.style.setProperty('--hud-color', '#FFFFFF'); window.speak("Колір білий."); return; }
+        if (transcript.includes("колір синій")) { document.documentElement.style.setProperty('--hud-color', '#00BFFF'); window.speak("Колір синій."); return; }
 
 
         // ЯКЩО ЖОДНА ЛОКАЛЬНА КОМАНДА НЕ СПРАЦЮВАЛА -> ПИТАЄМО ШТУЧНИЙ ІНТЕЛЕКТ
@@ -563,7 +550,7 @@ if (SpeechRecognition) {
 
         if (cleanQuery.length > 0) {
             if (dusyaGlow) dusyaGlow.className = 'glow-yellow'; 
-            if (window.recognition) window.recognition.stop(); 
+            // [ВИПРАВЛЕНО]: Прибрав window.recognition.stop(); -> Вуха залишаються відкритими, щоб почути СТОП!
             
             const aiResponse = await window.askDusyaAI(cleanQuery);
             if (aiResponse) {
@@ -573,12 +560,14 @@ if (SpeechRecognition) {
                     window.isWaitingForCommand = true; clearTimeout(window.waitingTimer);
                     window.waitingTimer = setTimeout(triggerChatterboxLoop, 5000); 
                 }
+            } else {
+                // Якщо запит скасовано рубильником (порожня відповідь), просто повертаємо зелений статус
+                if (dusyaGlow) dusyaGlow.className = 'glow-green';
             }
         } else {
             if (dusyaGlow) dusyaGlow.className = 'glow-green'; 
             window.isWaitingForCommand = true;
             window.waitingTimer = setTimeout(() => { window.isWaitingForCommand = false; }, 10000); 
-            if (window.recognition) window.recognition.stop(); 
             window.speak("Слухаю");
         }
     };
@@ -589,11 +578,10 @@ if (SpeechRecognition) {
         } 
     };
     
-    // Функція для безперервного циклу Балабола (Із примусовим вмиканням вух)
+    // Функція для безперервного циклу Балабола
     async function triggerChatterboxLoop() {
         if (window.currentMode !== "CHATTERBOX" || !window.isListening) return;
         window.isWaitingForCommand = false;
-        if (window.recognition) window.recognition.stop();
         
         const aiResponse = await window.askDusyaAI("Водій мовчить. Продовжуй розмову сама! Розкажи смішну історію з життя, цікавий факт, анекдот або новину, ніби ти справжня балакуча жінка. І в кінці знову запитай щось у водійки.");
         if (aiResponse) {
@@ -601,7 +589,6 @@ if (SpeechRecognition) {
                 if (window.currentMode === "CHATTERBOX") {
                     window.isWaitingForCommand = true;
                     window.waitingTimer = setTimeout(triggerChatterboxLoop, 5000);
-                    // Жорстке примусове вмикання мікрофона на період 5-секундної паузи
                     try { 
                         window.recognition.start(); 
                         const glow = document.getElementById('dusya-glow');
@@ -612,7 +599,7 @@ if (SpeechRecognition) {
         }
     }
 
-    // 10-СЕКУНДНИЙ СТОРОЖ Запуск фонового таймера, який страхує від залипань та сну мікрофона
+    // 10-СЕКУНДНИЙ СТОРОЖ
     setInterval(() => {
         if (window.isListening && !window.isRadarActive && !window.speechSynthesis.speaking && !window.isRecordingNote && !window.isWaitingForCleanupConfirm && !window.isAskingForYear) {
             try {
