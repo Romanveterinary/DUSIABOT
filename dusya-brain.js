@@ -14,7 +14,7 @@ window.isWaitingForCleanupConfirm = false;
 window.isTimeMachineActive = false;
 window.isBikeMode = false;
 
-// [ДОДАНО] Глобальні змінні для нових функцій
+// Глобальні змінні для нових функцій
 window.currentLanguage = "uk-UA"; 
 window.targetTimeYear = null;
 window.isAskingForYear = false;
@@ -22,6 +22,9 @@ window.isAutoTourGuide = false;
 
 window.activeLoopOscillators = []; 
 window.activeIntervals = [];
+
+// [ДОДАНО] Змінна для скасування фантомних запитів ШІ
+let currentAbortController = null;
 
 // --- 1. АУДІОЕФЕКТИ ТА ЗВУКИ ---
 window.stopAllSounds = function() {
@@ -122,13 +125,11 @@ window.speak = function(text, onEndCallback = null) {
         const cleanText = text.replace(/[*#_]/g, '').trim();
         const utterance = new SpeechSynthesisUtterance(cleanText);
         
-        // [ОНОВЛЕНО] Встановлюємо мову з глобальної змінної
         utterance.lang = window.currentLanguage;
 
         const voices = window.speechSynthesis.getVoices();
         let bestVoice;
         
-        // [ОНОВЛЕНО] Логіка вибору голосу під різні мови
         if (window.currentLanguage === 'en-US') {
             bestVoice = voices.find(v => v.lang.includes('en') && (v.name.includes('Female') || v.name.includes('Google')));
             if (!bestVoice) bestVoice = voices.find(v => v.lang.includes('en'));
@@ -176,11 +177,16 @@ window.askDusyaAI = async function(userQuestion) {
     let apiKey = localStorage.getItem('gemini_api_key');
     if (!apiKey) return "Будь ласка, введіть API ключ у налаштуваннях.";
     
+    // [ОНОВЛЕНО] Якщо попередній запит ще летить, вбиваємо його (щоб Дуся не відповідала на старі питання)
+    if (currentAbortController) {
+        currentAbortController.abort();
+    }
+    currentAbortController = new AbortController();
+    
     const now = new Date();
     const currentDateStr = now.toLocaleDateString('uk-UA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     const currentTimeStr = now.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
     
-    // [ДОДАНО] Зчитуємо ім'я водія та обрану мову для ШІ
     let driverName = localStorage.getItem('dusya_driver_name') || "";
     let nameInstruction = driverName ? ` Водія звати ${driverName}. Звертайся до нього на ім'я.` : "";
     let langInstruction = window.currentLanguage === 'en-US' ? " ВАЖЛИВО: Відповідай виключно Англійською мовою." : (window.currentLanguage === 'pt-PT' ? " ВАЖЛИВО: Відповідай виключно Португальською мовою." : "");
@@ -189,7 +195,6 @@ window.askDusyaAI = async function(userQuestion) {
     if (window.isBikeMode) {
         systemInstruction = `Ти - Дуся, спортивний вело-штурман. Сьогодні: ${currentDateStr}. Місце: ${window.currentPlaceName || "невідомо"}. Відповідай коротко. Знаєш все про велосипеди, калорії, здоров'я.${nameInstruction}${langInstruction}`;
     } else if (window.currentMode === "FRIEND") {
-        // [ОНОВЛЕНО] Розгорнуті відповіді на будь-яку тему
         systemInstruction = `Ти - Дуся, найкращий друг водія. Сьогодні: ${currentDateStr}. Місце: ${window.currentPlaceName || "невідомо"}. Обмежень за темами немає: психологія, космос, бізнес, кіно. Відповідай максимально розгорнуто, цікаво, з деталями. Підтримуй глибоку бесіду.${nameInstruction}${langInstruction}`;
     } else if (window.currentMode === "DEFAULT") {
         systemInstruction = `Ти - Дуся, авто-штурман. Сьогодні: ${currentDateStr}, час: ${currentTimeStr}. Місце: ${window.currentPlaceName || "невідомо"}. Відповідай коротко і по-військовому чітко.${nameInstruction}${langInstruction}`;
@@ -201,14 +206,13 @@ window.askDusyaAI = async function(userQuestion) {
     window.chatHistory.push({ role: "user", parts: [{ text: userQuestion }] });
     if (window.chatHistory.length > 10) window.chatHistory = window.chatHistory.slice(-10);
 
-    const abortCtrl = new AbortController();
-    const timeoutId = setTimeout(() => abortCtrl.abort(), 7000);
+    const timeoutId = setTimeout(() => currentAbortController.abort(), 7000);
 
     try {
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ systemInstruction: { parts: [{ text: systemInstruction }] }, contents: window.chatHistory }),
-            signal: abortCtrl.signal
+            signal: currentAbortController.signal
         });
         clearTimeout(timeoutId);
         const data = await response.json();
@@ -217,7 +221,7 @@ window.askDusyaAI = async function(userQuestion) {
         return aiText;
     } catch (error) {
         clearTimeout(timeoutId);
-        if (error.name === 'AbortError') return "Інтернет занадто слабкий. Переходжу в офлайн режим.";
+        if (error.name === 'AbortError') return ""; // Якщо перервано рубильником - мовчимо
         return "Тимчасові проблеми зі зв'язком з інтернетом.";
     }
 };
@@ -239,29 +243,60 @@ if (SpeechRecognition) {
         const dusyaGlow = document.getElementById('dusya-glow');
 
         // ==========================================
-        // [АБСОЛЮТНИЙ ПРІОРИТЕТ 1] АВАРІЙНИЙ СТОП
-        // Зруйнує будь-який режим миттєво, ще до перевірки на ім'я "Дуся"
+        // [ОНОВЛЕНО] АБСОЛЮТНИЙ ПРІОРИТЕТ 1: ІДЕАЛЬНИЙ РУБИЛЬНИК (СТОП / МОВЧИ)
         // ==========================================
-        if (transcript.match(/(стоп|завершити|хватить|закрийся|не пизди|тихо|вимкни звук|зупинись)/i)) {
+        let isStopCommand = transcript.match(/(стоп|завершити|хватить|закрийся|не пизди|тихо|вимкни звук|зупинись)/i);
+        let isQuietCommand = transcript.match(/(мовчи|замовкни|помовчи)/i);
+        
+        if (isStopCommand || isQuietCommand) {
+            // 1. Обриваємо голос і звуки
             window.stopAllSounds();
-            window.isBikeMode = false;
+            window.speechSynthesis.cancel(); 
+            
+            // 2. Вбиваємо поточний запит до ШІ, щоб не було фантомних відповідей
+            if (currentAbortController) currentAbortController.abort();
+            
+            // 3. Збиваємо всі таймери та режими
+            clearTimeout(window.waitingTimer);
+            if (window.noteTimerInterval) { clearInterval(window.noteTimerInterval); window.noteTimerInterval = null; }
+            window.isWaitingForCommand = false; 
+            window.isRecordingNote = false; 
+            window.isTimeMachineActive = false; 
+            window.isAutoGuideActive = false;
             window.isAskingForYear = false;
             window.isAutoTourGuide = false;
-            if (window.noteTimerInterval) { clearInterval(window.noteTimerInterval); window.noteTimerInterval = null; }
-            window.speechSynthesis.cancel(); 
-            window.isWaitingForCommand = false; window.isRecordingNote = false; window.isTimeMachineActive = false; window.isAutoGuideActive = false;
+            window.isBikeMode = false;
             
+            // 4. Стираємо пам'ять ШІ
+            window.chatHistory = [];
+            
+            // 5. Відновлюємо інтерфейс штурмана
             document.documentElement.style.setProperty('--hud-color', '#FFFFFF');
-            document.body.style.backgroundColor = ""; document.getElementById('note-overlay').style.display = 'none';
+            document.body.style.backgroundColor = ""; 
+            document.getElementById('note-overlay').style.display = 'none';
             if (dusyaGlow) dusyaGlow.className = 'glow-green'; 
             window.playPing(); 
-            
             if(window.resetToNavigator) window.resetToNavigator();
+            
+            // 6. Жіноча образа (тільки якщо була Балаболом)
+            if (window.currentMode === "CHATTERBOX") {
+                window.currentMode = "DEFAULT";
+                if (window.recognition) window.recognition.stop();
+                let randomInsult = ["Ну і добре, ти скучний.", "Ой, все. Їдь сам у тиші.", "Я ж хотіла як краще... ну і мовчу.", "Ну і сам розважайся."];
+                window.speak(randomInsult[Math.floor(Math.random() * randomInsult.length)]);
+            } else {
+                // Стандартне скидання
+                window.currentMode = "DEFAULT";
+                if (isQuietCommand) {
+                    if (window.recognition) window.recognition.stop();
+                    window.speak("Зрозуміла. Переходжу в режим тиші.");
+                }
+            }
             return;
         }
 
         // ==========================================
-        // [АБСОЛЮТНИЙ ПРІОРИТЕТ 2] ДІАЛОГ ПРО МАШИНУ ЧАСУ
+        // АБСОЛЮТНИЙ ПРІОРИТЕТ 2: ДІАЛОГ ПРО МАШИНУ ЧАСУ
         // ==========================================
         if (window.isAskingForYear) {
             let yearMatch = transcript.match(/\b(19\d\d|20\d\d)\b/);
@@ -369,12 +404,12 @@ if (SpeechRecognition) {
             return;
         }
 
-        // [ДОДАНО] МОВНІ КОМАНДИ
+        // МОВНІ КОМАНДИ
         if (transcript.match(/(english version|speak english|англійськ)/i)) { window.currentLanguage = 'en-US'; window.speak("English mode activated."); return; }
         if (transcript.match(/(fala portugu|португальськ)/i)) { window.currentLanguage = 'pt-PT'; window.speak("Modo português ativado."); return; }
         if (transcript.match(/(українська мова|поверни українську)/i)) { window.currentLanguage = 'uk-UA'; window.speak("Українську мову відновлено."); return; }
 
-        // [ДОДАНО] АВТОГІД (Активація)
+        // АВТОГІД (Активація)
         if (transcript.match(/(режим автогід|включи автогід|авто гід)/i)) {
             window.isAutoTourGuide = true; 
             if (window.recognition) window.recognition.stop();
@@ -382,12 +417,11 @@ if (SpeechRecognition) {
             return;
         }
 
-        // РЕЖИМ ДРУГА ТА АВТО-ГІД (Автогід старий)
+        // РЕЖИМ ДРУГА 
         if (transcript.match(/(режим друга|будь другом|переключи на друга|режим друг)/i)) {
             window.currentMode = "FRIEND";
-            window.isAutoGuideActive = true; 
             if (window.recognition) window.recognition.stop();
-            window.speak("Ввімкнула режим друга. Я на зв'язку, їдемо. І до речі, розповідатиму цікавинки по дорозі.");
+            window.speak("Ввімкнула режим друга. Я на зв'язку, їдемо.");
             return;
         }
 
@@ -462,7 +496,7 @@ if (SpeechRecognition) {
             return;
         }
 
-        // ЗАМІТКИ (Запуск, видалення, читання)
+        // ЗАМІТКИ
         if (transcript.match(/(запиши замітку|додай замітку)/i)) {
             window.isRecordingNote = true; window.currentNoteText = "";
             let noteStartTime = Date.now();
@@ -480,7 +514,7 @@ if (SpeechRecognition) {
         if (transcript.match(/(прочитай замітки|мої замітки)/i)) { let notes = localStorage.getItem('dusya_notes'); if (window.recognition) window.recognition.stop(); if (notes) window.speak("У сейфі є такі записи: " + notes); else window.speak("Сейф порожній."); return; }
         if (transcript.match(/(видали всі замітки|очистити сейф)/i)) { localStorage.removeItem('dusya_notes'); if (window.recognition) window.recognition.stop(); window.speak("Сейф порожній, всі замітки видалено."); return; }
 
-        // [ОНОВЛЕНО] МАШИНА ЧАСУ (Частина 1 - Запит Року)
+        // МАШИНА ЧАСУ (Активація)
         if (transcript.match(/(машина часу|назад у майбутнє)/i)) {
             window.isAskingForYear = true;
             if (window.recognition) window.recognition.stop();
@@ -488,11 +522,15 @@ if (SpeechRecognition) {
             return;
         }
 
+        // РЕЖИМ БАЛАБОЛА
         if (transcript.match(/(режим балабола|будь балаболом)/i)) {
-            window.currentMode = "CHATTERBOX"; window.isAutoGuideActive = false;
+            window.currentMode = "CHATTERBOX"; 
             if (window.recognition) window.recognition.stop();
             window.speak("О, це мій улюблений режим! Вмикаю Балабола. Ну що, розкажи, як настрій сьогодні в дорозі?");
-            window.isWaitingForCommand = true; clearTimeout(window.waitingTimer); window.waitingTimer = setTimeout(() => { window.isWaitingForCommand = false; }, 10000); return;
+            window.isWaitingForCommand = true; clearTimeout(window.waitingTimer); 
+            // [ОНОВЛЕНО] Таймер для балабола зменшено до 5 секунд
+            window.waitingTimer = setTimeout(triggerChatterboxLoop, 5000); 
+            return;
         }
         
         // МИТТЄВІ ЛОКАЛЬНІ КОМАНДИ
@@ -507,7 +545,7 @@ if (SpeechRecognition) {
             if (window.handleWeatherCommand) window.handleWeatherCommand(city); return; 
         }
 
-        // [ОНОВЛЕНО] ПАСХАЛКА ДЛЯ УЛІ (Безвідмовне розпізнавання)
+        // ПАСХАЛКА ДЛЯ УЛІ
         if (transcript.match(/ул[яюїі]/i) || transcript.includes("улею") || transcript.includes("ульою")) {
             if (window.recognition) window.recognition.stop();
             document.body.style.backgroundColor = "#4B0082"; 
@@ -529,7 +567,6 @@ if (SpeechRecognition) {
         clearTimeout(window.waitingTimer); window.isWaitingForCommand = false;
         let cleanQuery = transcript;
         
-        // Відрізаємо слово "Дуся" і все що до нього, щоб не відправляти його в ШІ
         if (transcript.includes("дуся")) {
             cleanQuery = transcript.substring(transcript.indexOf("дуся") + 4).trim().replace(/^[,.!?\s]+/, "").trim();
         }
@@ -539,11 +576,13 @@ if (SpeechRecognition) {
             if (window.recognition) window.recognition.stop(); 
             
             const aiResponse = await window.askDusyaAI(cleanQuery);
-            window.speak(aiResponse);
+            if (aiResponse) { // Озвучуємо тільки якщо відповідь не порожня (не перервана рубильником)
+                window.speak(aiResponse);
 
-            if (window.currentMode === "CHATTERBOX") {
-                window.isWaitingForCommand = true; clearTimeout(window.waitingTimer);
-                window.waitingTimer = setTimeout(() => { window.isWaitingForCommand = false; }, 10000);
+                if (window.currentMode === "CHATTERBOX") {
+                    window.isWaitingForCommand = true; clearTimeout(window.waitingTimer);
+                    window.waitingTimer = setTimeout(triggerChatterboxLoop, 5000); // 5 секунд для Балабола
+                }
             }
         } else {
             if (dusyaGlow) dusyaGlow.className = 'glow-green'; 
@@ -559,4 +598,22 @@ if (SpeechRecognition) {
             try { window.recognition.start(); } catch(e) {} 
         } 
     };
+    
+    // [ДОДАНО] Функція для безперервного циклу Балабола
+    async function triggerChatterboxLoop() {
+        if (window.currentMode !== "CHATTERBOX" || !window.isListening) return;
+        window.isWaitingForCommand = false;
+        if (window.recognition) window.recognition.stop();
+        
+        // Прихований запит до ШІ, якщо водій мовчить
+        const aiResponse = await window.askDusyaAI("Водій мовчить. Продовжуй розмову сама! Розкажи смішну історію з життя, цікавий факт, анекдот або новину, ніби ти справжня балакуча жінка. І в кінці знову запитай щось у водія.");
+        if (aiResponse) {
+            window.speak(aiResponse, () => {
+                if (window.currentMode === "CHATTERBOX") {
+                    window.isWaitingForCommand = true;
+                    window.waitingTimer = setTimeout(triggerChatterboxLoop, 5000);
+                }
+            });
+        }
+    }
 }
