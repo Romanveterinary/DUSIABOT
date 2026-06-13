@@ -22,7 +22,7 @@
     }
 })();
 
-console.log("Запуск Дусі v7.5: Пароль повернуто, Розумний пошук адрес");
+console.log("Запуск Дусі v8.0: Жорсткий ШІ-контроль, Ютуб-фікс та Прогрес-бар");
 
 // 1. ГЛОБАЛЬНІ ЗМІННІ ТА ЕЛЕМЕНТИ
 const speedElement = document.getElementById('speed-display');
@@ -42,63 +42,67 @@ window.gpsSpeed = 0;
 window.currentLat = null;
 window.currentLon = null;
 window.isFirstLocationCheck = true;
-window.isTimeWarping = false; // [ДОДАНО] Блокування екрану для анімації років
+window.isTimeWarping = false; 
 
 let inactivityTimer = null; 
 
-// ==========================================
-// [ДОДАНО] ЛОГІКА ІНДИКАТОРА ІНТЕРНЕТУ
-// ==========================================
+// --- ІНДИКАТОР ІНТЕРНЕТУ ---
 function updateNetworkStatus() {
     const indicator = document.getElementById('network-indicator');
     if (!indicator) return;
     
-    // Скидаємо класи
     indicator.className = '';
     
     if (navigator.onLine) {
-        // Якщо інтернет є, робимо псевдо-пінг для перевірки швидкості (швидка відповідь від гугла)
         let startTime = Date.now();
         fetch('https://dns.google/resolve?name=google.com', { mode: 'no-cors', cache: 'no-store' })
             .then(() => {
                 let ping = Date.now() - startTime;
-                if (ping < 500) indicator.classList.add('net-good'); // Зелений
-                else indicator.classList.add('net-weak'); // Жовтий
+                if (ping < 500) indicator.classList.add('net-good'); 
+                else indicator.classList.add('net-weak'); 
             })
-            .catch(() => indicator.classList.add('net-bad')); // Червоний
+            .catch(() => indicator.classList.add('net-bad')); 
     } else {
-        indicator.classList.add('net-bad'); // Червоний
+        indicator.classList.add('net-bad'); 
     }
 }
-// Перевіряємо при старті та кожні 10 секунд
 window.addEventListener('online', updateNetworkStatus);
 window.addEventListener('offline', updateNetworkStatus);
 setInterval(updateNetworkStatus, 10000);
 setTimeout(updateNetworkStatus, 1000);
-// ==========================================
 
-// ==========================================
-// [ДОДАНО] ФУНКЦІЯ ГЛОБАЛЬНОГО СКИДАННЯ ТА ПРОЩАННЯ
-// ==========================================
+// --- ЗАХИСТ ВІД ЗАВИСАННЯ (Повернення з Ютубу) ---
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && window.isListening && !window.isRadarActive && window.recognition) {
+        try {
+            window.recognition.abort(); // Жорстко вбиваємо зламаний старий процес
+            setTimeout(() => {
+                window.recognition.start();
+                if (window.speak) window.speak("Я знову тут.");
+                if (dusyaGlow) dusyaGlow.className = 'glow-green';
+            }, 500);
+        } catch(e) {}
+    }
+});
+
+// --- ФУНКЦІЯ ГЛОБАЛЬНОГО СКИДАННЯ ---
 window.resetToNavigator = function() {
-    // 1. Вимикаємо радар
     if (window.isRadarActive && window.toggleRadar) { 
         window.toggleRadar(false); 
         if (document.getElementById('ai-radar-toggle')) document.getElementById('ai-radar-toggle').checked = false; 
     }
-    // 2. Скидаємо балабола/друга до стандарту
     window.currentMode = "DEFAULT";
     window.isTimeWarping = false;
     
-    // 3. Ховаємо навігаційні стрілки ТА ПОВНІСТЮ ЗУПИНЯЄМО МАРШРУТ
     document.getElementById('navigation-container').style.display = 'none';
+    const progressContainer = document.getElementById('route-progress-container');
+    if (progressContainer) progressContainer.style.display = 'none';
+
     window.isSmartNavActive = false;
     if (window.navigationInterval) {
         clearInterval(window.navigationInterval);
         window.navigationInterval = null;
     }
-    
-    if(window.recognition && window.speak) window.speak("Режим штурмана активовано.");
 };
 
 window.playChimeJingle = function() {
@@ -116,13 +120,11 @@ window.playChimeJingle = function() {
             osc.connect(gain); gain.connect(ctx.destination);
             osc.start(start); osc.stop(start + duration);
         };
-        playTone(329.63, t, 0.2);       // Мі
-        playTone(392.00, t + 0.15, 0.25); // Соль
-        playTone(523.25, t + 0.3, 0.5);   // До
+        playTone(329.63, t, 0.2);       
+        playTone(392.00, t + 0.15, 0.25); 
+        playTone(523.25, t + 0.3, 0.5);   
     } catch(e) {}
 };
-// ==========================================
-
 
 // 2. ФУНКЦІЇ ІНТЕРФЕЙСУ (ЗАХИЩЕНИЙ МОБІЛЬНИЙ FULLSCREEN)
 function toggleFullScreen(enable) {
@@ -139,9 +141,7 @@ function toggleFullScreen(enable) {
                 exitFS.call(document).catch(err => {});
             }
         }
-    } catch (e) {
-        console.log("Повноекранний режим не підтримується.");
-    }
+    } catch (e) {}
 }
 
 function resetInactivityTimer() {
@@ -192,7 +192,6 @@ if (closeSettingsBtn) {
     });
 }
 
-// ВІДКРИТТЯ ІНТЕРАКТИВНОЇ МАПИ
 if (openMapBtn) {
     openMapBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -200,7 +199,6 @@ if (openMapBtn) {
     });
 }
 
-// ЗАКРИТТЯ МАПИ
 const closeMapBtn = document.getElementById('close-map-btn');
 if (closeMapBtn) {
     closeMapBtn.addEventListener('click', () => {
@@ -209,9 +207,6 @@ if (closeMapBtn) {
     });
 }
 
-// ==========================================
-// [ДОДАНО] КНОПКА ЗАПУСКУ РАДАРА В НАЛАШТУВАННЯХ
-// ==========================================
 const launchRadarBtn = document.getElementById('launch-radar-btn');
 if (launchRadarBtn) {
     launchRadarBtn.addEventListener('click', () => {
@@ -223,8 +218,6 @@ if (launchRadarBtn) {
         resetInactivityTimer();
     });
 }
-// ==========================================
-
 
 if (saveSettingsBtn) {
     saveSettingsBtn.addEventListener('click', () => {
@@ -350,15 +343,12 @@ if (navigator.geolocation) {
             if (speedKmh >= 0) { 
                 if (window.isTimeMachineActive && speedKmh > window.gpsSpeed + 3 && window.playSciFiAcceleration) { window.playSciFiAcceleration(); }
                 
-                // ==========================================
-                // [ОНОВЛЕНО] МАШИНА ЧАСУ: ЕПІЧНИЙ ВІДЛІК
-                // ==========================================
                 if (window.isTimeMachineActive && speedKmh >= 90 && !window.said88mph) {
                     window.said88mph = true; 
                     if(window.playPing) window.playPing(); 
                     
                     if (window.targetTimeYear) {
-                        window.isTimeWarping = true; // Блокуємо оновлення звичайної швидкості
+                        window.isTimeWarping = true; 
                         if(window.speak) window.speak("Стрибок у часі!");
                         
                         let currentY = new Date().getFullYear();
@@ -366,11 +356,10 @@ if (navigator.geolocation) {
                         let speedEl = document.getElementById('speed-display');
                         
                         if (speedEl) {
-                            speedEl.classList.add('time-warp'); // Ефект розмиття та витягування (додамо в CSS)
+                            speedEl.classList.add('time-warp'); 
                             let step = currentY > targetY ? -1 : 1;
                             let y = currentY;
                             
-                            // Шалений відлік років
                             let warpInterval = setInterval(() => {
                                 y += step;
                                 speedEl.innerText = y;
@@ -378,7 +367,6 @@ if (navigator.geolocation) {
                                 if (y === targetY) {
                                     clearInterval(warpInterval);
                                     
-                                    // Спалах прибуття (додамо в CSS)
                                     document.body.classList.add('time-flash'); 
                                     setTimeout(() => document.body.classList.remove('time-flash'), 1000);
                                     
@@ -388,19 +376,16 @@ if (navigator.geolocation) {
                                         if (window.openYouTubeApp) window.openYouTubeApp(`популярні пісні ${targetY} року`);
                                     });
                                     
-                                    window.isTimeMachineActive = false; // Вимикаємо режим
-                                    setTimeout(() => { window.isTimeWarping = false; }, 3000); // Повертаємо спідометр через 3 секунди
+                                    window.isTimeMachineActive = false; 
+                                    setTimeout(() => { window.isTimeWarping = false; }, 3000); 
                                 }
-                            }, 50); // Зміна цифр кожні 50мс
+                            }, 50); 
                         }
                     } else {
-                        // Якщо рік не вказано (fallback на старий режим)
                         if(window.speak) window.speak("90 кілометрів на годину! Стрибок у часі!");
                     }
                 }
-                // ==========================================
 
-                // Оновлюємо спідометр ТІЛЬКИ якщо не йде відлік років
                 if(speedElement && !window.isTimeWarping) speedElement.innerText = speedKmh; 
                 window.gpsSpeed = speedKmh; 
             }
