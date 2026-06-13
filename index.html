@@ -16,21 +16,20 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-    <link rel="stylesheet" href="style.css?v=12.0">
+    <link rel="stylesheet" href="style.css?v=11.0">
 </head>
 <body>
 
-    <div id="route-top-panel" style="display: none; position: absolute; top: 0; left: 0; width: 100%; z-index: 100;">
-        <div style="width: 100%; height: 8px; background-color: #222;">
-            <div id="route-progress-bar" style="height: 100%; width: 0%; background-color: #00FF00; transition: width 1s linear; box-shadow: 0 0 15px #00FF00;"></div>
-        </div>
-        <div id="route-info" style="display: flex; justify-content: space-between; padding: 10px 25px; font-size: 20px; font-family: 'Arial Black', sans-serif; font-weight: 900; color: #00FF00; text-shadow: 0 0 10px #000, 0 0 20px #000; background: linear-gradient(to bottom, rgba(0,0,0,0.8), rgba(0,0,0,0));">
-            <span id="total-route-distance">-- км</span>
-            <span id="eta-display">Прибуття: --:--</span>
-        </div>
-    </div>
-
     <div id="network-indicator" title="Статус з'єднання"></div>
+
+    <div id="dashcam-layer" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 600; background: #000;">
+        <video id="dashcam-video" autoplay playsinline muted style="display: none;"></video>
+        <canvas id="dashcam-canvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover;"></canvas>
+        
+        <button id="exit-dashcam-btn" style="position: absolute; top: 20px; right: 20px; padding: 10px 15px; background: rgba(0,0,0,0.6); color: white; border: 1px solid #fff; border-radius: 8px; font-size: 16px; font-weight: bold; z-index: 601; cursor: pointer;">✖ Вийти</button>
+        
+        <button id="save-dashcam-btn" class="recording-pulse" style="position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); padding: 15px 30px; background: rgba(255, 0, 0, 0.85); color: white; border: 2px solid #fff; border-radius: 30px; font-weight: bold; font-size: 20px; z-index: 601; cursor: pointer;">💾 ЗБЕРЕГТИ ВІДЕО</button>
+    </div>
 
     <div id="ai-radar-layer" style="display: none;">
         <video id="ai-video" autoplay playsinline muted></video>
@@ -71,15 +70,20 @@
         <div class="modal-content">
             <h2>Налаштування</h2>
             
-            <p>Введіть ваш ключ Gemini API (для ШІ):</p>
+            <p>Введіть ваш ключ Gemini API:</p>
             <input type="password" id="api-key-input" placeholder="Вставте ключ сюди...">
 
             <p style="margin-top: 15px;">Як до вас звертатися?</p>
             <input type="text" id="driver-name-input" placeholder="Наприклад, Роман..." style="width: 100%; padding: 12px; margin: 5px 0 10px; border-radius: 8px; border: 1px solid #555; background-color: #333; color: white; box-sizing: border-box;">
             
             <hr style="border-color: #444;">
+
+            <h3 style="margin-top: 0; color: #ff4444;">📹 Відеореєстратор</h3>
+            <button id="launch-dashcam-btn" style="width: 100%; padding: 10px; margin-bottom: 15px; background: #ff4444; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer;">🔴 УВІМКНУТИ РЕЄСТРАТОР</button>
+
+            <hr style="border-color: #444;">
             
-            <h3 style="margin-top: 0; color: #0cf;">ШІ-Радар (Безпека)</h3>
+            <h3 style="margin-top: 0; color: #0cf;">ШІ-Радар (Демо-безпека)</h3>
             <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; margin-bottom: 10px; color: #fff;">
                 <input type="checkbox" id="ai-radar-toggle" style="width: 20px; height: 20px;">
                 <span style="font-weight: bold;">Підготувати сканер</span>
@@ -94,23 +98,20 @@
             <hr style="border-color: #444;">
 
             <h3 style="margin-top: 0; color: #ffcc00;">📚 Команди Дусі</h3>
-            <div style="background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px; font-size: 0.85em; max-height: 150px; overflow-y: auto; text-align: left; line-height: 1.4; margin-bottom: 15px;">
-                <b style="color: #0cf;">ЛОКАЛЬНИЙ ШТУРМАН (ШІ вимкнено):</b><br>
-                • <i>"Включи ютуб [пісня]"</i> - відкриває відео<br>
-                • <i>"Покажи заправки / кафе"</i> - пошук на мапі<br>
-                • <i>"Маршрут [назва точки] / додому"</i><br>
+            <div style="background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px; font-size: 0.85em; max-height: 120px; overflow-y: auto; text-align: left; line-height: 1.4; margin-bottom: 15px;">
+                <b style="color: #0cf;">БЕЗ ШІ-КЛЮЧА (З інтернетом):</b><br>
+                • <i>"Погода в [місто]"</i><br>
+                • <i>"Маршрут [назва точки]"</i> / <i>"Дорога додому"</i><br>
+                • <i>"Стоп / Хватить / Зупинись"</i> - скидання екрана<br>
+                • <i>"Приїхали / До побачення / Кінець"</i> - вимкнути Дусю<br>
+                • <i>"Дуся, реєстратор"</i> - увімкнути камеру<br>
+                • <i>"Дуся, радар"</i> - увімкнути ШІ-сканер<br>
                 • <i>"Запам'ятай парковку" / "Де машина?"</i><br>
-                • <i>"Запиши замітку" / "Прочитай замітки"</i><br>
-                • <i>"Погода в [місто]" / "Котра година?"</i><br>
-                • <i>"Яка швидкість?" / "Колір [зелений...]"</i><br>
-                • <i>"Стоп / Зупинись"</i> - <b>скидає до Штурмана</b><br>
-                • <i>"Приїхали / До побачення"</i> - вимикає Дусю<br>
                 <br>
-                <b style="color: #0f0;">ШІ-РЕЖИМИ (Потрібен ключ Gemini):</b><br>
+                <b style="color: #0f0;">З ШІ-КЛЮЧЕМ (Gemini AI):</b><br>
+                • <i>"Дуся, [питання]"</i> - розумна відповідь<br>
                 • <i>"Режим друга"</i> - розумний попутник<br>
-                • <i>"Режим балабола"</i> - розваги в заторах<br>
-                • <i>"Включи автогід"</i> - екскурсовод по містах<br>
-                <i>(Тільки після цих команд можна запитувати ШІ)</i>
+                • <i>"Режим балабола"</i> - розваги (вмикається вручну)<br>
             </div>
 
             <div class="modal-buttons" style="margin-top: 20px;">
@@ -132,10 +133,10 @@
 
     <audio id="keep-alive-audio" loop src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"></audio>
 
-    <script src="radar.js?v=12.0"></script>
-    <script src="navigator.js?v=12.0"></script>
-    <script src="dusya-brain.js?v=12.0"></script>
-    <script src="app.js?v=12.0"></script>
+    <script src="radar.js?v=11.0"></script>
+    <script src="navigator.js?v=11.0"></script>
+    <script src="dusya-brain.js?v=11.0"></script>
+    <script src="app.js?v=11.0"></script>
     
     <script>
         document.addEventListener('DOMContentLoaded', () => {
