@@ -25,9 +25,8 @@ window.openInteractiveMap = function() {
     if(settingsModal) settingsModal.classList.add('hidden');
     if(mapModal) mapModal.classList.remove('hidden');
 
-    // Якщо мапи ще немає - створюємо
     if (!window.leafletMap) {
-        let startLat = window.currentLat || 49.42298; // Хмельницький по замовчуванню
+        let startLat = window.currentLat || 49.42298; 
         let startLon = window.currentLon || 26.98713;
         
         window.leafletMap = L.map('leaflet-map').setView([startLat, startLon], 15);
@@ -35,12 +34,10 @@ window.openInteractiveMap = function() {
             maxZoom: 19, attribution: '© OpenStreetMap'
         }).addTo(window.leafletMap);
 
-        // Ставимо синю крапку "Я тут"
         if (window.currentLat) {
             L.circleMarker([window.currentLat, window.currentLon], {color: '#0cf', radius: 8, fillOpacity: 0.8}).addTo(window.leafletMap).bindPopup("Ви зараз тут").openPopup();
         }
 
-        // Обробник КЛІКУ по мапі
         window.leafletMap.on('click', function(e) {
             if (window.currentPin) window.leafletMap.removeLayer(window.currentPin);
             window.currentPin = L.marker(e.latlng).addTo(window.leafletMap);
@@ -110,9 +107,6 @@ function getDistance(lat1, lon1, lat2, lon2) {
     return Math.round(R * c); 
 }
 
-// ==========================================
-// [ОНОВЛЕНО] РОЗУМНА ДВОЗОННА НАВІГАЦІЯ (МІСТО / ТРАСА)
-// ==========================================
 function updateHUD(maneuver, distance) {
     const navContainer = document.getElementById('navigation-container');
     const navArrow = document.getElementById('nav-arrow');
@@ -121,51 +115,45 @@ function updateHUD(maneuver, distance) {
     
     navContainer.style.display = 'block';
     
-    // Показуємо відстань до самого маневру повороту
     if (distance > 1000) navDistance.innerText = (distance / 1000).toFixed(1) + ' км';
     else navDistance.innerText = distance + ' м';
 
-    // Визначаємо, чи потрібно вже відкривати карту маневру (поворот)
     let showActualTurn = false;
     if (window.isInCityZone) {
-        if (distance <= 50) showActualTurn = true; // В місті - строго за 50 метрів
+        if (distance <= 50) showActualTurn = true; 
     } else {
-        if (distance <= 200) showActualTurn = true; // На трасі - за 200 метрів для безпеки
+        if (distance <= 200) showActualTurn = true; 
     }
 
-    let arrowSymbol = '&#8593;'; // ⬆ за замовчуванням завжди їдемо ПРЯМО
+    let arrowSymbol = '↑'; 
     
     if (showActualTurn) {
         let type = maneuver.type; 
         let modifier = maneuver.modifier;
-        if (type === 'roundabout') arrowSymbol = '&#8635;'; // 🔄 Кільце
-        else if (modifier === 'right' || modifier === 'sharp right') arrowSymbol = '&#8680;'; // ➡ Праворуч
-        else if (modifier === 'slight right') arrowSymbol = '&#8599;'; // ↗ Ледь праворуч
-        else if (modifier === 'left' || modifier === 'sharp left') arrowSymbol = '&#8678;'; // ⬅ Ліворуч
-        else if (modifier === 'slight left') arrowSymbol = '&#8598;'; // ↖ Ледь ліворуч
-        else if (modifier === 'uturn') arrowSymbol = '&#8617;'; // ↩ Розворот
+        if (type === 'roundabout') arrowSymbol = '↻'; 
+        else if (modifier === 'right' || modifier === 'sharp right') arrowSymbol = '⇨'; 
+        else if (modifier === 'slight right') arrowSymbol = '↗'; 
+        else if (modifier === 'left' || modifier === 'sharp left') arrowSymbol = '⇦'; 
+        else if (modifier === 'slight left') arrowSymbol = '↖'; 
+        else if (modifier === 'uturn') arrowSymbol = '↩'; 
     }
 
     navArrow.innerHTML = arrowSymbol; 
     navArrow.className = ''; 
     
-    // Динамічна інтенсивність блимання знаку повороту
-    if (arrowSymbol === '&#8593;') {
-        navArrow.classList.add('static'); // Стрілка прямо ніколи не блимає
+    if (arrowSymbol === '↑') {
+        navArrow.classList.add('static'); 
     } else {
         if (window.isInCityZone) {
-            // МІСТО: 50м - 20м (повільно), менше 20м (дуже швидко!)
             if (distance <= 20) navArrow.classList.add('blink-fast');
             else navArrow.classList.add('blink-slow');
         } else {
-            // ТРАСА: 200м - 100м (просто горить), 100м - 50м (м'яко блимає), менше 50м (агресивно швидко)
             if (distance <= 50) navArrow.classList.add('blink-fast');
             else if (distance <= 100) navArrow.classList.add('blink-slow');
             else navArrow.classList.add('static');
         }
     }
 }
-// ==========================================
 
 // --- 3. ЦИКЛ НАВІГАЦІЇ ТА ПРОКЛАДАННЯ МАРШРУТУ ---
 window.processNavigation = function() {
@@ -181,8 +169,13 @@ window.processNavigation = function() {
         if (window.currentStepIndex >= window.currentRouteSteps.length) {
             window.isSmartNavActive = false; 
             clearInterval(window.navigationInterval);
+            
             const container = document.getElementById('navigation-container');
             if (container) container.style.display = 'none';
+            
+            const progressContainer = document.getElementById('route-progress-container');
+            if (progressContainer) progressContainer.style.display = 'none';
+
             if (window.speak) window.speak("Маршрут завершено. Ви прибули до місця призначення.");
             return;
         }
@@ -198,7 +191,6 @@ window.processNavigation = function() {
         }
     }
     
-    // [ОНОВЛЕНО] Розрахунок загального залишку кілометрів та точного ETA до кінця маршруту
     let remainingDistance = distToStep;
     for (let i = window.currentStepIndex + 1; i < window.currentRouteSteps.length; i++) {
         if (window.currentRouteSteps[i].distance) {
@@ -206,13 +198,11 @@ window.processNavigation = function() {
         }
     }
 
-    // Запис кілометрів у лівий верхній куток (шукає елемент з id="total-route-distance")
     const totalDistElem = document.getElementById('total-route-distance');
     if (totalDistElem) {
         totalDistElem.innerText = (remainingDistance / 1000).toFixed(1) + ' км';
     }
 
-    // Запис точного Часу Прибуття у правий верхній куток (id="eta-display")
     if (window.initialRouteDistance && window.initialRouteDuration) {
         let ratio = remainingDistance / window.initialRouteDistance;
         let remainingDurationSec = window.initialRouteDuration * ratio;
@@ -224,6 +214,16 @@ window.processNavigation = function() {
         const etaElem = document.getElementById('eta-display');
         if (etaElem) {
             etaElem.innerText = `Прибуття: ${hours}:${minutes}`;
+        }
+
+        // --- ЛОГІКА СМУГИ ПРОГРЕСУ ---
+        let progressPercent = 100 - (ratio * 100);
+        if (progressPercent < 0) progressPercent = 0;
+        if (progressPercent > 100) progressPercent = 100;
+        
+        const progressBar = document.getElementById('route-progress-bar');
+        if (progressBar) {
+            progressBar.style.width = progressPercent + '%';
         }
     }
 
@@ -244,13 +244,18 @@ window.startSmartNavigation = async function(targetName) {
         let data = await res.json();
         
         if (data.routes && data.routes.length > 0) {
-            // Фиксуємо початкові глобальні дані всього шляху для розрахунку ETA
             window.initialRouteDistance = data.routes[0].distance;
             window.initialRouteDuration = data.routes[0].duration;
 
             window.currentRouteSteps = data.routes[0].legs[0].steps; 
             window.currentStepIndex = 0; 
             window.isSmartNavActive = true;
+            
+            const progressContainer = document.getElementById('route-progress-container');
+            const progressBar = document.getElementById('route-progress-bar');
+            if (progressContainer) progressContainer.style.display = 'block';
+            if (progressBar) progressBar.style.width = '0%';
+
             if (window.navigationInterval) clearInterval(window.navigationInterval);
             window.navigationInterval = setInterval(window.processNavigation, 1000); 
             if (window.speak) window.speak("Маршрут побудовано. Рушаємо!");
@@ -298,7 +303,6 @@ window.checkLocationAndZone = async function() {
                 window.isInCityZone = isCurrentlyInCity; 
             }
 
-            // ЛОГІКА АВТОГІДА
             if (window.isAutoTourGuide && place) {
                 let distSinceLastTour = window.lastTourLat ? getDistance(window.currentLat, window.currentLon, window.lastTourLat, window.lastTourLon) : 99999;
                 
