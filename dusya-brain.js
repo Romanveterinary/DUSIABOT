@@ -282,7 +282,7 @@ if (SpeechRecognition) {
                     if (isQuietCommand) {
                         window.speak("Зрозуміла. Переходжу в режим тиші.");
                     } else {
-                        window.speak("Зрозуміла. Режим штурмана."); // Залізне підтвердження
+                        window.speak("Зрозуміла. Режим штурмана."); 
                     }
                 }
             }, 100);
@@ -510,11 +510,13 @@ if (SpeechRecognition) {
             return;
         }
         
-        // МИТТЄВІ ЛОКАЛЬНІ КОМАНДИ
-        if (transcript.match(/(котра година|який час)/i)) { window.speak(`Зараз ${new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}.`); return; }
-        if (transcript.match(/(яке сьогодні число|яка дата)/i)) { window.speak(`Сьогодні ${new Date().toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' })}.`); return; }
+        // ==========================================
+        // [ОНОВЛЕНО] МИТТЄВІ ЛОКАЛЬНІ КОМАНДИ (Гнучкіший пошук слів)
+        // ==========================================
+        if (transcript.match(/(годин|час)/i)) { window.speak(`Зараз ${new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}.`); return; }
+        if (transcript.match(/(число|дат)/i)) { window.speak(`Сьогодні ${new Date().toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' })}.`); return; }
         if (transcript.match(/(де ми|яке це місто)/i)) { window.speak(`Ми зараз в районі ${window.currentPlaceName || "невідомо"}.`); return; }
-        if (transcript.includes("яка швидкість")) { window.speak(`Зараз наша швидкість ${window.gpsSpeed || 0}.`); return; }
+        if (transcript.match(/(швидкість|їдемо)/i)) { window.speak(`Зараз наша швидкість ${window.gpsSpeed || 0}.`); return; }
 
         let weatherMatch = transcript.match(/погода\s+(?:в|у)\s+([а-яєіїґ-]+)/i);
         if (transcript.includes("pogoda") || transcript.includes("погода")) { 
@@ -550,7 +552,7 @@ if (SpeechRecognition) {
         }
 
         if (cleanQuery.length > 0) {
-            // [ОНОВЛЕНО] ЖОРСТКИЙ ПРІОРИТЕТ: Якщо режим штурмана (DEFAULT), ШІ ігнорується
+            // ЖОРСТКИЙ ПРІОРИТЕТ: Якщо режим штурмана (DEFAULT), ШІ ігнорується
             if (window.currentMode === "DEFAULT") {
                 window.speak("Команду не розпізнано. Я в локальному режимі.");
                 if (dusyaGlow) dusyaGlow.className = 'glow-green';
