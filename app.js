@@ -22,7 +22,7 @@
     }
 })();
 
-console.log("Запуск Дусі v9.5: Гнучкі команди та захист мікрофона");
+console.log("Запуск Дусі v10.0: Відеореєстратор з телеметрією");
 
 // 1. ГЛОБАЛЬНІ ЗМІННІ ТА ЕЛЕМЕНТИ
 const speedElement = document.getElementById('speed-display');
@@ -71,16 +71,13 @@ window.addEventListener('offline', updateNetworkStatus);
 setInterval(updateNetworkStatus, 10000);
 setTimeout(updateNetworkStatus, 1000);
 
-// ==========================================
-// [ОНОВЛЕНО] ПОСИЛЕНИЙ ЗАХИСТ ВІД ЗАВИСАННЯ
-// ==========================================
+// --- ЗАХИСТ ВІД ЗАВИСАННЯ (Повернення з Ютубу) ---
 document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && window.isListening && !window.isRadarActive && window.recognition) {
+    if (document.visibilityState === 'visible' && window.isListening && !window.isRadarActive && !window.isDashcamActive && window.recognition) {
         try {
-            window.recognition.abort(); // Жорстко вбиваємо зламаний старий процес
+            window.recognition.abort(); 
         } catch(e) {}
         
-        // Даємо телефону 1.5 секунди (замість 0.5), щоб точно звільнити мікрофон після Ютубу
         setTimeout(() => {
             try {
                 window.recognition.start();
@@ -90,6 +87,152 @@ document.addEventListener('visibilitychange', () => {
         }, 1500); 
     }
 });
+
+// ==========================================
+// [ДОДАНО] ЛОГІКА ВІДЕОРЕЄСТРАТОРА (Без ШІ)
+// ==========================================
+window.isDashcamActive = false;
+let dashcamStream = null;
+let dashcamRecorder = null;
+let dashcamChunks = [];
+let dashcamCycleInterval = null;
+
+window.toggleDashcam = async function(turnOn) {
+    const layer = document.getElementById('dashcam-layer');
+    const video = document.getElementById('dashcam-video');
+    const canvas = document.getElementById('dashcam-canvas');
+    
+    if (turnOn) {
+        window.isDashcamActive = true;
+        layer.style.display = 'block';
+        
+        // Глушимо мікрофон Дусі, щоб не "їв" процесор
+        if (window.recognition) { try { window.recognition.stop(); } catch(e){} }
+        
+        try {
+            dashcamStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+            video.srcObject = dashcamStream;
+            video.play();
+            
+            requestAnimationFrame(drawDashcamFrame);
+            startDashcamCycle();
+            
+            if(window.speak) window.speak("Відеореєстратор увімкнено. Мікрофон вимкнено для стабільного запису.");
+        } catch(e) {
+            if(window.speak) window.speak("Помилка доступу до камери.");
+            window.toggleDashcam(false);
+        }
+    } else {
+        window.isDashcamActive = false;
+        layer.style.display = 'none';
+        if (dashcamStream) { dashcamStream.getTracks().forEach(t => t.stop()); dashcamStream = null; }
+        if (dashcamRecorder && dashcamRecorder.state !== 'inactive') dashcamRecorder.stop();
+        if (dashcamCycleInterval) clearInterval(dashcamCycleInterval);
+        dashcamChunks = [];
+        
+        // Повертаємо мікрофон після виходу з реєстратора
+        if (window.isListening && window.recognition) { try { window.recognition.start(); } catch(e){} }
+    }
+};
+
+function drawDashcamFrame() {
+    if (!window.isDashcamActive) return;
+    const video = document.getElementById('dashcam-video');
+    const canvas = document.getElementById('dashcam-canvas');
+    const ctx = canvas.getContext('2d');
+    
+    if (video.videoWidth > 0) {
+        if (canvas.width !== video.videoWidth) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+        }
+        
+        // 1. Малюємо чисте відео
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // 2. Малюємо Швидкість (Яскраво-синя, зверху праворуч)
+        ctx.fillStyle = "#00BFFF"; 
+        ctx.font = "bold " + (canvas.height * 0.12) + "px Arial";
+        ctx.textAlign = "right";
+        ctx.fillText((window.gpsSpeed || 0) + " км/год", canvas.width - 20, canvas.height * 0.15);
+        
+        // 3. Малюємо Час та Координати (Білі з чорною обводкою, знизу зліва)
+        ctx.fillStyle = "#FFFFFF";
+        ctx.font = "bold " + (canvas.height * 0.04) + "px Arial";
+        ctx.textAlign = "left";
+        
+        let now = new Date();
+        let timeStr = now.toLocaleDateString('uk-UA') + " " + now.toLocaleTimeString('uk-UA');
+        let geoStr = window.currentPlaceName ? window.currentPlaceName : "GPS: " + (window.currentLat ? window.currentLat.toFixed(4) + ", " + window.currentLon.toFixed(4) : "Пошук...");
+        
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "black";
+        ctx.strokeText(timeStr + " | " + geoStr, 20, canvas.height - 30);
+        ctx.fillText(timeStr + " | " + geoStr, 20, canvas.height - 30);
+    }
+    
+    requestAnimationFrame(drawDashcamFrame);
+}
+
+function startDashcamCycle() {
+    const canvas = document.getElementById('dashcam-canvas');
+    const stream = canvas.captureStream(30); // 30 кадрів за секунду
+    
+    dashcamChunks = [];
+    dashcamRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+    
+    dashcamRecorder.ondataavailable = e => {
+        if (e.data && e.data.size > 0) dashcamChunks.push(e.data);
+    };
+    
+    dashcamRecorder.start();
+    
+    // Кільцевий буфер: Перезапуск кожні 5 хвилин
+    if (dashcamCycleInterval) clearInterval(dashcamCycleInterval);
+    dashcamCycleInterval = setInterval(() => {
+        if (dashcamRecorder.state === "recording") {
+            dashcamRecorder.onstop = () => { startDashcamCycle(); }; 
+            dashcamRecorder.stop();
+        }
+    }, 300000); // 300 000 мс = 5 хвилин
+}
+
+// Кнопки інтерфейсу реєстратора
+document.getElementById('launch-dashcam-btn')?.addEventListener('click', () => {
+    const modal = document.getElementById('settings-modal');
+    if (modal) modal.classList.add('hidden');
+    window.toggleDashcam(true);
+});
+
+document.getElementById('exit-dashcam-btn')?.addEventListener('click', () => {
+    window.toggleDashcam(false);
+});
+
+document.getElementById('save-dashcam-btn')?.addEventListener('click', () => {
+    if (!dashcamRecorder || dashcamRecorder.state !== "recording") return;
+    
+    const btn = document.getElementById('save-dashcam-btn');
+    const oldText = btn.innerText;
+    btn.innerText = "ЗБЕРЕЖЕННЯ...";
+    btn.style.background = "#00FF00";
+    
+    dashcamRecorder.onstop = () => {
+        const blob = new Blob(dashcamChunks, { type: 'video/webm' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = `Dusya_Dashcam_${new Date().getTime()}.webm`;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); }, 100);
+        
+        btn.innerText = oldText;
+        btn.style.background = "rgba(255, 0, 0, 0.85)";
+        startDashcamCycle();
+    };
+    dashcamRecorder.stop();
+});
 // ==========================================
 
 // --- ФУНКЦІЯ ГЛОБАЛЬНОГО СКИДАННЯ ---
@@ -98,6 +241,10 @@ window.resetToNavigator = function() {
         window.toggleRadar(false); 
         if (document.getElementById('ai-radar-toggle')) document.getElementById('ai-radar-toggle').checked = false; 
     }
+    
+    // Приховуємо реєстратор, якщо був увімкнений
+    if (window.isDashcamActive && window.toggleDashcam) window.toggleDashcam(false);
+    
     window.currentMode = "DEFAULT";
     window.isTimeWarping = false;
     
@@ -290,7 +437,7 @@ if (dusyaBtn) {
                 }, 1000);
             }
             
-            if (window.recognition && !window.isRadarActive) {
+            if (window.recognition && !window.isRadarActive && !window.isDashcamActive) {
                 try { window.recognition.start(); } catch(err){}
             }
 
@@ -309,6 +456,9 @@ if (dusyaBtn) {
                 window.toggleRadar(false); 
                 if(radarToggleCheckbox) radarToggleCheckbox.checked = false; 
             }
+            
+            // Вимикаємо реєстратор при вимиканні Дусі
+            if (window.isDashcamActive && window.toggleDashcam) window.toggleDashcam(false);
             
             if (window.noteTimerInterval) { clearInterval(window.noteTimerInterval); window.noteTimerInterval = null; }
             if (window.recognition) window.recognition.stop(); 
