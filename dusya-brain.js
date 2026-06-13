@@ -14,6 +14,12 @@ window.isWaitingForCleanupConfirm = false;
 window.isTimeMachineActive = false;
 window.isBikeMode = false;
 
+// [ДОДАНО] Глобальні змінні для нових функцій
+window.currentLanguage = "uk-UA"; 
+window.targetTimeYear = null;
+window.isAskingForYear = false;
+window.isAutoTourGuide = false;
+
 window.activeLoopOscillators = []; 
 window.activeIntervals = [];
 
@@ -115,12 +121,26 @@ window.speak = function(text, onEndCallback = null) {
         window.speechSynthesis.cancel(); 
         const cleanText = text.replace(/[*#_]/g, '').trim();
         const utterance = new SpeechSynthesisUtterance(cleanText);
-        utterance.lang = 'uk-UA';
+        
+        // [ОНОВЛЕНО] Встановлюємо мову з глобальної змінної
+        utterance.lang = window.currentLanguage;
 
         const voices = window.speechSynthesis.getVoices();
-        let bestVoice = voices.find(v => v.lang.includes('uk'));
-        if (!bestVoice) bestVoice = voices.find(v => v.lang.includes('ru') && (v.name.toLowerCase().includes('female') || v.name.includes('Google') || v.name.includes('Milena')));
-        if (!bestVoice) bestVoice = voices.find(v => v.lang.includes('ru'));
+        let bestVoice;
+        
+        // [ОНОВЛЕНО] Логіка вибору голосу під різні мови
+        if (window.currentLanguage === 'en-US') {
+            bestVoice = voices.find(v => v.lang.includes('en') && (v.name.includes('Female') || v.name.includes('Google')));
+            if (!bestVoice) bestVoice = voices.find(v => v.lang.includes('en'));
+        } else if (window.currentLanguage === 'pt-PT') {
+            bestVoice = voices.find(v => v.lang.includes('pt') && (v.name.includes('Female') || v.name.includes('Google')));
+            if (!bestVoice) bestVoice = voices.find(v => v.lang.includes('pt'));
+        } else {
+            bestVoice = voices.find(v => v.lang.includes('uk'));
+            if (!bestVoice) bestVoice = voices.find(v => v.lang.includes('ru') && (v.name.toLowerCase().includes('female') || v.name.includes('Google') || v.name.includes('Milena')));
+            if (!bestVoice) bestVoice = voices.find(v => v.lang.includes('ru'));
+        }
+        
         if (bestVoice) utterance.voice = bestVoice;
 
         utterance.onend = () => {
@@ -160,15 +180,21 @@ window.askDusyaAI = async function(userQuestion) {
     const currentDateStr = now.toLocaleDateString('uk-UA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     const currentTimeStr = now.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
     
+    // [ДОДАНО] Зчитуємо ім'я водія та обрану мову для ШІ
+    let driverName = localStorage.getItem('dusya_driver_name') || "";
+    let nameInstruction = driverName ? ` Водія звати ${driverName}. Звертайся до нього на ім'я.` : "";
+    let langInstruction = window.currentLanguage === 'en-US' ? " ВАЖЛИВО: Відповідай виключно Англійською мовою." : (window.currentLanguage === 'pt-PT' ? " ВАЖЛИВО: Відповідай виключно Португальською мовою." : "");
+
     let systemInstruction = "";
     if (window.isBikeMode) {
-        systemInstruction = `Ти - Дуся, спортивний вело-штурман. Сьогодні: ${currentDateStr}. Місце: ${window.currentPlaceName || "невідомо"}. Відповідай коротко. Знаєш все про велосипеди, калорії, здоров'я.`;
+        systemInstruction = `Ти - Дуся, спортивний вело-штурман. Сьогодні: ${currentDateStr}. Місце: ${window.currentPlaceName || "невідомо"}. Відповідай коротко. Знаєш все про велосипеди, калорії, здоров'я.${nameInstruction}${langInstruction}`;
     } else if (window.currentMode === "FRIEND") {
-        systemInstruction = `Ти - Дуся, надійний і розумний друг-попутник за кермом. Сьогодні: ${currentDateStr}. Місце: ${window.currentPlaceName || "невідомо"}. Відповідай дружньо, зріло, без клоунади. Якщо питання просте побутове - відповідай коротко. Якщо питання філософське, історичне чи складне - розкажи розгорнуто, цікаво, "розжовуючи" деталі. НЕ задавай примусових питань в кінці репліки.`;
+        // [ОНОВЛЕНО] Розгорнуті відповіді на будь-яку тему
+        systemInstruction = `Ти - Дуся, найкращий друг водія. Сьогодні: ${currentDateStr}. Місце: ${window.currentPlaceName || "невідомо"}. Обмежень за темами немає: психологія, космос, бізнес, кіно. Відповідай максимально розгорнуто, цікаво, з деталями. Підтримуй глибоку бесіду.${nameInstruction}${langInstruction}`;
     } else if (window.currentMode === "DEFAULT") {
-        systemInstruction = `Ти - Дуся, авто-штурман. Сьогодні: ${currentDateStr}, час: ${currentTimeStr}. Місце: ${window.currentPlaceName || "невідомо"}. Відповідай коротко і по-військовому чітко.`;
+        systemInstruction = `Ти - Дуся, авто-штурман. Сьогодні: ${currentDateStr}, час: ${currentTimeStr}. Місце: ${window.currentPlaceName || "невідомо"}. Відповідай коротко і по-військовому чітко.${nameInstruction}${langInstruction}`;
     } else if (window.currentMode === "CHATTERBOX") {
-        systemInstruction = `Ти - Дуся в режимі "Балабол". Твоя мета - розважати водія в заторах. Розказуй цікаві байки, жартуй. В кінці кожної репліки ти ОБОВ'ЯЗКОВО ставиш водію питання.`;
+        systemInstruction = `Ти - Дуся в режимі "Балабол". Твоя мета - розважати водія в заторах. Розказуй цікаві байки, жартуй. В кінці кожної репліки ти ОБОВ'ЯЗКОВО ставиш водію питання.${nameInstruction}${langInstruction}`;
     }
 
     if (window.chatHistory.length > 0 && window.chatHistory[window.chatHistory.length - 1].role === "user") { window.chatHistory.pop(); }
@@ -213,11 +239,57 @@ if (SpeechRecognition) {
         const dusyaGlow = document.getElementById('dusya-glow');
 
         // ==========================================
+        // [АБСОЛЮТНИЙ ПРІОРИТЕТ 1] АВАРІЙНИЙ СТОП
+        // Зруйнує будь-який режим миттєво, ще до перевірки на ім'я "Дуся"
+        // ==========================================
+        if (transcript.match(/(стоп|завершити|хватить|закрийся|не пизди|тихо|вимкни звук|зупинись)/i)) {
+            window.stopAllSounds();
+            window.isBikeMode = false;
+            window.isAskingForYear = false;
+            window.isAutoTourGuide = false;
+            if (window.noteTimerInterval) { clearInterval(window.noteTimerInterval); window.noteTimerInterval = null; }
+            window.speechSynthesis.cancel(); 
+            window.isWaitingForCommand = false; window.isRecordingNote = false; window.isTimeMachineActive = false; window.isAutoGuideActive = false;
+            
+            document.documentElement.style.setProperty('--hud-color', '#FFFFFF');
+            document.body.style.backgroundColor = ""; document.getElementById('note-overlay').style.display = 'none';
+            if (dusyaGlow) dusyaGlow.className = 'glow-green'; 
+            window.playPing(); 
+            
+            if(window.resetToNavigator) window.resetToNavigator();
+            return;
+        }
+
+        // ==========================================
+        // [АБСОЛЮТНИЙ ПРІОРИТЕТ 2] ДІАЛОГ ПРО МАШИНУ ЧАСУ
+        // ==========================================
+        if (window.isAskingForYear) {
+            let yearMatch = transcript.match(/\b(19\d\d|20\d\d)\b/);
+            if (yearMatch) {
+                window.targetTimeYear = yearMatch[1];
+                window.isTimeMachineActive = true;
+                window.isAskingForYear = false;
+                window.said88mph = false;
+                document.body.style.backgroundColor = "#000000";
+                document.documentElement.style.setProperty('--hud-color', '#00FF00');
+                const speedElement = document.getElementById('speed-display');
+                if (speedElement) speedElement.style.fontFamily = "'Courier New', Courier, monospace"; 
+                if (window.recognition) window.recognition.stop(); 
+                window.speak(`Ціль — ${window.targetTimeYear} рік. Розганяйтесь до 90 кілометрів на годину!`);
+            } else if (transcript.match(/(скасувати|відміна)/i)) {
+                window.isAskingForYear = false;
+                window.speak("Скасовано.");
+            } else {
+                window.speak("Не зрозуміла. Назвіть рік, наприклад, 1985.");
+            }
+            return;
+        }
+
+        // ==========================================
         // 1. ПЕРЕВІРКА: ЧИ ДО ДУСІ ЗВЕРТАЮТЬСЯ?
         // ==========================================
         let isAddressed = transcript.includes("дуся") || window.isWaitingForCommand;
 
-        // Блимкаємо жовтим і пікаємо ТІЛЬКИ якщо водій щойно сказав "Дуся"
         if (transcript.includes("дуся") && !window.isWaitingForCommand) { 
             if (dusyaGlow) dusyaGlow.className = 'glow-yellow'; 
             window.playPing(); 
@@ -258,25 +330,6 @@ if (SpeechRecognition) {
         // ==========================================
         if (!isAddressed) return;
 
-        // Тепер усі команди спрацюють безвідмовно, якщо щит пройдено!
-
-        // АВАРІЙНИЙ СТОП
-        if (transcript.match(/(стоп|завершити|хватить|закрийся|не пизди|тихо|вимкни звук|зупинись)/i)) {
-            window.stopAllSounds();
-            window.isBikeMode = false;
-            if (window.noteTimerInterval) { clearInterval(window.noteTimerInterval); window.noteTimerInterval = null; }
-            window.speechSynthesis.cancel(); 
-            window.isWaitingForCommand = false; window.isRecordingNote = false; window.isTimeMachineActive = false; window.isAutoGuideActive = false;
-            
-            document.documentElement.style.setProperty('--hud-color', '#FFFFFF');
-            document.body.style.backgroundColor = ""; document.getElementById('note-overlay').style.display = 'none';
-            if (dusyaGlow) dusyaGlow.className = 'glow-green'; 
-            window.playPing(); 
-            
-            if(window.resetToNavigator) window.resetToNavigator();
-            return;
-        }
-
         // ПРОЩАННЯ
         if (transcript.match(/(приїхали|до побачення|кінець)/i)) {
             if (window.recognition) window.recognition.stop();
@@ -316,7 +369,20 @@ if (SpeechRecognition) {
             return;
         }
 
-        // РЕЖИМ ДРУГА ТА АВТО-ГІД
+        // [ДОДАНО] МОВНІ КОМАНДИ
+        if (transcript.match(/(english version|speak english|англійськ)/i)) { window.currentLanguage = 'en-US'; window.speak("English mode activated."); return; }
+        if (transcript.match(/(fala portugu|португальськ)/i)) { window.currentLanguage = 'pt-PT'; window.speak("Modo português ativado."); return; }
+        if (transcript.match(/(українська мова|поверни українську)/i)) { window.currentLanguage = 'uk-UA'; window.speak("Українську мову відновлено."); return; }
+
+        // [ДОДАНО] АВТОГІД (Активація)
+        if (transcript.match(/(режим автогід|включи автогід|авто гід)/i)) {
+            window.isAutoTourGuide = true; 
+            if (window.recognition) window.recognition.stop();
+            window.speak("Режим автогіда увімкнено. Буду розповідати цікаві факти про місця, які ми проїжджаємо.");
+            return;
+        }
+
+        // РЕЖИМ ДРУГА ТА АВТО-ГІД (Автогід старий)
         if (transcript.match(/(режим друга|будь другом|переключи на друга|режим друг)/i)) {
             window.currentMode = "FRIEND";
             window.isAutoGuideActive = true; 
@@ -414,12 +480,12 @@ if (SpeechRecognition) {
         if (transcript.match(/(прочитай замітки|мої замітки)/i)) { let notes = localStorage.getItem('dusya_notes'); if (window.recognition) window.recognition.stop(); if (notes) window.speak("У сейфі є такі записи: " + notes); else window.speak("Сейф порожній."); return; }
         if (transcript.match(/(видали всі замітки|очистити сейф)/i)) { localStorage.removeItem('dusya_notes'); if (window.recognition) window.recognition.stop(); window.speak("Сейф порожній, всі замітки видалено."); return; }
 
+        // [ОНОВЛЕНО] МАШИНА ЧАСУ (Частина 1 - Запит Року)
         if (transcript.match(/(машина часу|назад у майбутнє)/i)) {
-            window.isTimeMachineActive = true; window.said88mph = false; document.body.style.backgroundColor = "#000000";
-            document.documentElement.style.setProperty('--hud-color', '#00FF00');
-            const speedElement = document.getElementById('speed-display');
-            if (speedElement) speedElement.style.fontFamily = "'Courier New', Courier, monospace"; 
-            if (window.recognition) window.recognition.stop(); window.speak("Конденсатор потоку увімкнено! Готові до стрибка в часі."); return;
+            window.isAskingForYear = true;
+            if (window.recognition) window.recognition.stop();
+            window.speak("Конденсатор потоку увімкнено. В який рік подорожуємо?");
+            return;
         }
 
         if (transcript.match(/(режим балабола|будь балаболом)/i)) {
@@ -441,12 +507,13 @@ if (SpeechRecognition) {
             if (window.handleWeatherCommand) window.handleWeatherCommand(city); return; 
         }
 
-        if (transcript.match(/(привітай улю|привітай уля|привіт уля)/i)) {
+        // [ОНОВЛЕНО] ПАСХАЛКА ДЛЯ УЛІ (Безвідмовне розпізнавання)
+        if (transcript.match(/ул[яюїі]/i) || transcript.includes("улею") || transcript.includes("ульою")) {
             if (window.recognition) window.recognition.stop();
             document.body.style.backgroundColor = "#4B0082"; 
             document.documentElement.style.setProperty('--hud-color', '#FF1493');
             window.playMagicSound();
-            window.speak("Ого, який важливий пасажир на борту! Привіт, Уля! Пристебни пасок, зараз буде магія! Ти слухалась тата і маму? Тоді ось тобі весела пісенька.", () => { window.openYouTubeApp("трендові пісні для підлітків 2024"); });
+            window.speak("Ого, який важливий пасажир на борту! Привіт, Уля! Пристебни пасок, зараз буде магія! Ти слухалась тата і маму? Тоді ось тобі весела пісенька.", () => { window.openYouTubeApp("сучасна музика для підлітків дівчаток 12 років"); });
             return;
         }
 
