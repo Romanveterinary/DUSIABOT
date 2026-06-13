@@ -16,9 +16,13 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-    <link rel="stylesheet" href="style.css?v=10.0">
+    <link rel="stylesheet" href="style.css?v=11.0">
 </head>
 <body>
+
+    <div id="route-progress-container" style="display: none;">
+        <div id="route-progress-bar"></div>
+    </div>
 
     <div id="network-indicator" title="Статус з'єднання"></div>
 
@@ -61,7 +65,7 @@
         <div class="modal-content">
             <h2>Налаштування</h2>
             
-            <p>Введіть ваш ключ Gemini API:</p>
+            <p>Введіть ваш ключ Gemini API (для ШІ):</p>
             <input type="password" id="api-key-input" placeholder="Вставте ключ сюди...">
 
             <p style="margin-top: 15px;">Як до вас звертатися?</p>
@@ -84,19 +88,23 @@
             <hr style="border-color: #444;">
 
             <h3 style="margin-top: 0; color: #ffcc00;">📚 Команди Дусі</h3>
-            <div style="background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px; font-size: 0.85em; max-height: 120px; overflow-y: auto; text-align: left; line-height: 1.4; margin-bottom: 15px;">
-                <b style="color: #0cf;">БЕЗ ШІ-КЛЮЧА (З інтернетом):</b><br>
-                • <i>"Погода в [місто]"</i><br>
-                • <i>"Маршрут [назва точки]"</i> / <i>"Дорога додому"</i><br>
-                • <i>"Стоп / Хватить / Зупинись"</i> - скидання екрана<br>
-                • <i>"Приїхали / До побачення / Кінець"</i> - вимкнути Дусю<br>
-                • <i>"Дуся, радар"</i> - увімкнути ШІ-сканер<br>
+            <div style="background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px; font-size: 0.85em; max-height: 150px; overflow-y: auto; text-align: left; line-height: 1.4; margin-bottom: 15px;">
+                <b style="color: #0cf;">ЛОКАЛЬНИЙ ШТУРМАН (ШІ вимкнено):</b><br>
+                • <i>"Включи ютуб [пісня]"</i> - відкриває відео<br>
+                • <i>"Покажи заправки / кафе"</i> - пошук на мапі<br>
+                • <i>"Маршрут [назва точки] / додому"</i><br>
                 • <i>"Запам'ятай парковку" / "Де машина?"</i><br>
+                • <i>"Запиши замітку" / "Прочитай замітки"</i><br>
+                • <i>"Погода в [місто]" / "Котра година?"</i><br>
+                • <i>"Яка швидкість?" / "Колір [зелений...]"</i><br>
+                • <i>"Стоп / Зупинись"</i> - <b>скидає до Штурмана</b><br>
+                • <i>"Приїхали / До побачення"</i> - вимикає Дусю<br>
                 <br>
-                <b style="color: #0f0;">З ШІ-КЛЮЧЕМ (Gemini AI):</b><br>
-                • <i>"Дуся, [питання]"</i> - розумна відповідь<br>
+                <b style="color: #0f0;">ШІ-РЕЖИМИ (Потрібен ключ Gemini):</b><br>
                 • <i>"Режим друга"</i> - розумний попутник<br>
-                • <i>"Режим балабола"</i> - розваги (вмикається вручну)<br>
+                • <i>"Режим балабола"</i> - розваги в заторах<br>
+                • <i>"Включи автогід"</i> - екскурсовод по містах<br>
+                <i>(Тільки після цих команд можна запитувати ШІ)</i>
             </div>
 
             <div class="modal-buttons" style="margin-top: 20px;">
@@ -118,10 +126,10 @@
 
     <audio id="keep-alive-audio" loop src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"></audio>
 
-    <script src="radar.js?v=10.0"></script>
-    <script src="navigator.js?v=10.0"></script>
-    <script src="dusya-brain.js?v=10.0"></script>
-    <script src="app.js?v=10.0"></script>
+    <script src="radar.js?v=11.0"></script>
+    <script src="navigator.js?v=11.0"></script>
+    <script src="dusya-brain.js?v=11.0"></script>
+    <script src="app.js?v=11.0"></script>
     
     <script>
         document.addEventListener('DOMContentLoaded', () => {
