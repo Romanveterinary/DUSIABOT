@@ -108,7 +108,6 @@ function getDistance(lat1, lon1, lat2, lon2) {
 }
 
 function updateHUD(maneuver, distance) {
-    // ЖОРСТКИЙ БЛОК: Якщо режим штурмана скасовано - не відображати стрілку
     if (!window.isSmartNavActive) return; 
 
     const navContainer = document.getElementById('navigation-container');
@@ -128,23 +127,23 @@ function updateHUD(maneuver, distance) {
         if (distance <= 200) showActualTurn = true; 
     }
 
-    let arrowSymbol = '↑'; 
+    let arrowSymbol = '&#8593;'; 
     
     if (showActualTurn) {
         let type = maneuver.type; 
         let modifier = maneuver.modifier;
-        if (type === 'roundabout') arrowSymbol = '↻'; 
-        else if (modifier === 'right' || modifier === 'sharp right') arrowSymbol = '⇨'; 
-        else if (modifier === 'slight right') arrowSymbol = '↗'; 
-        else if (modifier === 'left' || modifier === 'sharp left') arrowSymbol = '⇦'; 
-        else if (modifier === 'slight left') arrowSymbol = '↖'; 
-        else if (modifier === 'uturn') arrowSymbol = '↩'; 
+        if (type === 'roundabout') arrowSymbol = '&#8635;'; 
+        else if (modifier === 'right' || modifier === 'sharp right') arrowSymbol = '&#8680;'; 
+        else if (modifier === 'slight right') arrowSymbol = '&#8599;'; 
+        else if (modifier === 'left' || modifier === 'sharp left') arrowSymbol = '&#8678;'; 
+        else if (modifier === 'slight left') arrowSymbol = '&#8598;'; 
+        else if (modifier === 'uturn') arrowSymbol = '&#8617;'; 
     }
 
     navArrow.innerHTML = arrowSymbol; 
     navArrow.className = ''; 
     
-    if (arrowSymbol === '↑') {
+    if (arrowSymbol === '&#8593;') {
         navArrow.classList.add('static'); 
     } else {
         if (window.isInCityZone) {
@@ -159,8 +158,6 @@ function updateHUD(maneuver, distance) {
 }
 
 // --- 3. ЦИКЛ НАВІГАЦІЇ ТА ПРОКЛАДАННЯ МАРШРУТУ ---
-
-// [НОВА] Жорстка зупинка всіх навігаційних процесів
 window.stopSmartNavigation = function() {
     window.isSmartNavActive = false;
     window.currentRouteSteps = [];
@@ -171,15 +168,12 @@ window.stopSmartNavigation = function() {
         window.navigationInterval = null;
     }
     
-    // Приховуємо стрілку
     const navContainer = document.getElementById('navigation-container');
     if (navContainer) navContainer.style.display = 'none';
     
-    // Приховуємо прогрес бар
     const topPanel = document.getElementById('route-top-panel');
     if (topPanel) topPanel.style.display = 'none';
     
-    // Очищуємо текстові поля
     const totalDistElem = document.getElementById('total-route-distance');
     if (totalDistElem) totalDistElem.innerText = '-- км';
     
@@ -188,7 +182,6 @@ window.stopSmartNavigation = function() {
 };
 
 window.processNavigation = function() {
-    // Додатковий захист від фантомних спрацьовувань
     if (!window.isSmartNavActive || window.currentRouteSteps.length === 0 || !window.currentLat || !window.currentLon) return;
     
     let step = window.currentRouteSteps[window.currentStepIndex];
@@ -199,7 +192,7 @@ window.processNavigation = function() {
     if (distToStep <= 25) {
         window.currentStepIndex++;
         if (window.currentStepIndex >= window.currentRouteSteps.length) {
-            window.stopSmartNavigation(); // Замінив на виклик нової функції очищення
+            window.stopSmartNavigation(); 
             if (window.speak) window.speak("Маршрут завершено. Ви прибули до місця призначення.");
             return;
         }
@@ -259,7 +252,7 @@ window.startSmartNavigation = async function(targetName) {
     if (!target) { if (window.speak) window.speak(`Точку ${targetName} не знайдено в книзі.`); return; }
     if (!window.currentLat || !window.currentLon) { if (window.speak) window.speak("Чекаю сигнал GPS."); return; }
 
-    window.isSmartNavActive = true; // Фіксуємо одразу намір їхати
+    window.isSmartNavActive = true; 
     if (window.speak) window.speak(`Будую маршрут до точки ${targetName}.`);
     
     try {
@@ -268,7 +261,6 @@ window.startSmartNavigation = async function(targetName) {
         let res = await fetch(url); 
         let data = await res.json();
         
-        // ЗАХИСТ: Якщо під час запиту до сервера користувач сказав "Стоп" - скасовуємо все
         if (!window.isSmartNavActive) return; 
         
         if (data.routes && data.routes.length > 0) {
@@ -295,6 +287,8 @@ window.startSmartNavigation = async function(targetName) {
 };
 
 // --- 4. ІНШІ ФУНКЦІЇ ---
+
+// [ВИПРАВЛЕНО]: Офіційне посилання Google Maps
 window.searchLocalPlaces = function(query) { 
     window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`, '_blank'); 
 };
@@ -303,6 +297,7 @@ window.saveParking = function(lat, lon) {
     if (lat && lon) { localStorage.setItem('dusya_parking', JSON.stringify({lat, lon})); if (window.speak) window.speak("Координати парковки збережено."); }
 };
 
+// [ВИПРАВЛЕНО]: Офіційне посилання Google Maps для пішохода
 window.findCar = function() {
     let pData = localStorage.getItem('dusya_parking');
     if (pData) { 
