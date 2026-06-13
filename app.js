@@ -22,7 +22,7 @@
     }
 })();
 
-console.log("Запуск Дусі v8.0: Жорсткий ШІ-контроль, Ютуб-фікс та Прогрес-бар");
+console.log("Запуск Дусі v9.0: Фікс стрілки та прогрес бар з кілометрами");
 
 // 1. ГЛОБАЛЬНІ ЗМІННІ ТА ЕЛЕМЕНТИ
 const speedElement = document.getElementById('speed-display');
@@ -75,7 +75,7 @@ setTimeout(updateNetworkStatus, 1000);
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && window.isListening && !window.isRadarActive && window.recognition) {
         try {
-            window.recognition.abort(); // Жорстко вбиваємо зламаний старий процес
+            window.recognition.abort(); 
             setTimeout(() => {
                 window.recognition.start();
                 if (window.speak) window.speak("Я знову тут.");
@@ -94,14 +94,19 @@ window.resetToNavigator = function() {
     window.currentMode = "DEFAULT";
     window.isTimeWarping = false;
     
-    document.getElementById('navigation-container').style.display = 'none';
-    const progressContainer = document.getElementById('route-progress-container');
-    if (progressContainer) progressContainer.style.display = 'none';
-
-    window.isSmartNavActive = false;
-    if (window.navigationInterval) {
-        clearInterval(window.navigationInterval);
-        window.navigationInterval = null;
+    // [ОНОВЛЕНО] Жорстке придушення навігації (викликає функцію з navigator.js)
+    if (window.stopSmartNavigation) {
+        window.stopSmartNavigation();
+    } else {
+        // Фоллбек, якщо щось пішло не так
+        document.getElementById('navigation-container').style.display = 'none';
+        const topPanel = document.getElementById('route-top-panel');
+        if (topPanel) topPanel.style.display = 'none';
+        window.isSmartNavActive = false;
+        if (window.navigationInterval) {
+            clearInterval(window.navigationInterval);
+            window.navigationInterval = null;
+        }
     }
 };
 
@@ -304,7 +309,9 @@ if (dusyaBtn) {
             if (window.recognition) window.recognition.stop(); 
             keepAliveAudio.pause();
             
-            window.currentMode = "DEFAULT"; 
+            // Виклик жорсткого скидання при вимкненні
+            if (window.resetToNavigator) window.resetToNavigator();
+            
             window.chatHistory = []; 
             window.isWaitingForCommand = false; 
             window.isAutoGuideActive = false;
@@ -312,7 +319,6 @@ if (dusyaBtn) {
             window.isRecordingNote = false; 
             window.isWaitingForCleanupConfirm = false; 
             window.isBikeMode = false; 
-            window.isTimeWarping = false;
             
             toggleFullScreen(false);
             
