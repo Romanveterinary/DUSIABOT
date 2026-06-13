@@ -42,6 +42,7 @@ window.gpsSpeed = 0;
 window.currentLat = null;
 window.currentLon = null;
 window.isFirstLocationCheck = true;
+window.isTimeWarping = false; // [ДОДАНО] Блокування екрану для анімації років
 
 let inactivityTimer = null; 
 
@@ -87,6 +88,7 @@ window.resetToNavigator = function() {
     }
     // 2. Скидаємо балабола/друга до стандарту
     window.currentMode = "DEFAULT";
+    window.isTimeWarping = false;
     
     // 3. Ховаємо навігаційні стрілки ТА ПОВНІСТЮ ЗУПИНЯЄМО МАРШРУТ
     document.getElementById('navigation-container').style.display = 'none';
@@ -317,6 +319,7 @@ if (dusyaBtn) {
             window.isRecordingNote = false; 
             window.isWaitingForCleanupConfirm = false; 
             window.isBikeMode = false; 
+            window.isTimeWarping = false;
             
             toggleFullScreen(false);
             
@@ -346,12 +349,59 @@ if (navigator.geolocation) {
             
             if (speedKmh >= 0) { 
                 if (window.isTimeMachineActive && speedKmh > window.gpsSpeed + 3 && window.playSciFiAcceleration) { window.playSciFiAcceleration(); }
+                
+                // ==========================================
+                // [ОНОВЛЕНО] МАШИНА ЧАСУ: ЕПІЧНИЙ ВІДЛІК
+                // ==========================================
                 if (window.isTimeMachineActive && speedKmh >= 90 && !window.said88mph) {
                     window.said88mph = true; 
                     if(window.playPing) window.playPing(); 
-                    if(window.speak) window.speak("90 кілометрів на годину! Стрибок у часі!");
+                    
+                    if (window.targetTimeYear) {
+                        window.isTimeWarping = true; // Блокуємо оновлення звичайної швидкості
+                        if(window.speak) window.speak("Стрибок у часі!");
+                        
+                        let currentY = new Date().getFullYear();
+                        let targetY = parseInt(window.targetTimeYear);
+                        let speedEl = document.getElementById('speed-display');
+                        
+                        if (speedEl) {
+                            speedEl.classList.add('time-warp'); // Ефект розмиття та витягування (додамо в CSS)
+                            let step = currentY > targetY ? -1 : 1;
+                            let y = currentY;
+                            
+                            // Шалений відлік років
+                            let warpInterval = setInterval(() => {
+                                y += step;
+                                speedEl.innerText = y;
+                                
+                                if (y === targetY) {
+                                    clearInterval(warpInterval);
+                                    
+                                    // Спалах прибуття (додамо в CSS)
+                                    document.body.classList.add('time-flash'); 
+                                    setTimeout(() => document.body.classList.remove('time-flash'), 1000);
+                                    
+                                    speedEl.classList.remove('time-warp');
+                                    
+                                    if(window.speak) window.speak(`Ми прибули у ${targetY} рік.`, () => {
+                                        if (window.openYouTubeApp) window.openYouTubeApp(`популярні пісні ${targetY} року`);
+                                    });
+                                    
+                                    window.isTimeMachineActive = false; // Вимикаємо режим
+                                    setTimeout(() => { window.isTimeWarping = false; }, 3000); // Повертаємо спідометр через 3 секунди
+                                }
+                            }, 50); // Зміна цифр кожні 50мс
+                        }
+                    } else {
+                        // Якщо рік не вказано (fallback на старий режим)
+                        if(window.speak) window.speak("90 кілометрів на годину! Стрибок у часі!");
+                    }
                 }
-                if(speedElement) speedElement.innerText = speedKmh; 
+                // ==========================================
+
+                // Оновлюємо спідометр ТІЛЬКИ якщо не йде відлік років
+                if(speedElement && !window.isTimeWarping) speedElement.innerText = speedKmh; 
                 window.gpsSpeed = speedKmh; 
             }
 
