@@ -9,6 +9,11 @@ window.navigationInterval = null;
 window.leafletMap = null;
 window.currentPin = null;
 
+// Змінні для режиму "Автогід"
+window.lastTourLat = null;
+window.lastTourLon = null;
+window.lastTourPlace = null;
+
 // --- 1. АДРЕСНА КНИГА (ІНТЕРАКТИВНА МАПА) ---
 window.openInteractiveMap = function() {
     const mapModal = document.getElementById('map-modal');
@@ -103,7 +108,7 @@ function getDistance(lat1, lon1, lat2, lon2) {
 }
 
 // ==========================================
-// [ОНОВЛЕНО] ВЕКТОРНІ 3D СТРІЛКИ
+// [ОНОВЛЕНО] ВЕКТОРНІ 3D СТРІЛКИ ТА ДИСТАНЦІЇ
 // ==========================================
 function updateHUD(maneuver, distance) {
     const navContainer = document.getElementById('navigation-container');
@@ -115,26 +120,39 @@ function updateHUD(maneuver, distance) {
     if (distance > 1000) navDistance.innerText = (distance / 1000).toFixed(1) + ' км';
     else navDistance.innerText = distance + ' м';
 
-    // Використовуємо HTML-сутності замість емодзі, щоб вони приймали колір і тіні
-    let arrowSymbol = '&#8679;'; // ⬆ Прямо (векторний символ)
-    let type = maneuver.type; let modifier = maneuver.modifier;
-    
-    if (type === 'roundabout') arrowSymbol = '&#8635;'; // 🔄 Кільце
-    else if (modifier === 'right' || modifier === 'sharp right') arrowSymbol = '&#8680;'; // ➡ Праворуч
-    else if (modifier === 'slight right') arrowSymbol = '&#8599;'; // ↗ Ледь праворуч
-    else if (modifier === 'left' || modifier === 'sharp left') arrowSymbol = '&#8678;'; // ⬅ Ліворуч
-    else if (modifier === 'slight left') arrowSymbol = '&#8598;'; // ↖ Ледь ліворуч
-    else if (modifier === 'uturn') arrowSymbol = '&#8617;'; // ↩ Розворот
+    // Розумна дистанція показу поворотів (Місто vs Траса)
+    let showTurn = true;
+    if (window.isInCityZone && distance > 150) showTurn = false; // В місті показуємо за 150м
+    if (!window.isInCityZone && distance > 800) showTurn = false; // На трасі за 800м
 
-    navArrow.innerHTML = arrowSymbol; // innerHTML замість innerText для обробки коду символу
+    let arrowSymbol = '&#8679;'; // ⬆ Прямо за замовчуванням
+    
+    if (showTurn) {
+        let type = maneuver.type; let modifier = maneuver.modifier;
+        if (type === 'roundabout') arrowSymbol = '&#8635;'; // 🔄 Кільце
+        else if (modifier === 'right' || modifier === 'sharp right') arrowSymbol = '&#8680;'; // ➡ Праворуч
+        else if (modifier === 'slight right') arrowSymbol = '&#8599;'; // ↗ Ледь праворуч
+        else if (modifier === 'left' || modifier === 'sharp left') arrowSymbol = '&#8678;'; // ⬅ Ліворуч
+        else if (modifier === 'slight left') arrowSymbol = '&#8598;'; // ↖ Ледь ліворуч
+        else if (modifier === 'uturn') arrowSymbol = '&#8617;'; // ↩ Розворот
+    }
+
+    navArrow.innerHTML = arrowSymbol; 
     navArrow.className = ''; 
     
-    if (arrowSymbol === '&#8679;') navArrow.classList.add('static'); 
-    else {
-        if (distance > 500) navArrow.classList.add('static');
-        else if (distance > 200) navArrow.classList.add('blink-slow');
-        else if (distance > 20) navArrow.classList.add('blink-fast');
-        else navArrow.classList.add('static'); 
+    // Розумне блимання
+    if (arrowSymbol === '&#8679;') {
+        navArrow.classList.add('static'); 
+    } else {
+        if (window.isInCityZone) {
+            if (distance > 80) navArrow.classList.add('blink-slow');
+            else if (distance > 20) navArrow.classList.add('blink-fast');
+            else navArrow.classList.add('static');
+        } else {
+            if (distance > 300) navArrow.classList.add('blink-slow');
+            else if (distance > 50) navArrow.classList.add('blink-fast');
+            else navArrow.classList.add('static'); 
+        }
     }
 }
 // ==========================================
@@ -173,7 +191,7 @@ window.startSmartNavigation = async function(targetName) {
 
     if (window.speak) window.speak(`Будую маршрут до точки ${targetName}.`);
     try {
-        let url = `https://router.project-osrm.org/route/v1/driving/${window.currentLon},${window.currentLat};${target.lon},${target.lat}?steps=true&geometries=geojson&overview=false`;
+        let url = `https://router.project-osrm.org/route/v1/driving/${window.currentLon},${window.currentLat}?steps=true&geometries=geojson&overview=false`;
         let res = await fetch(url); let data = await res.json();
         if (data.routes && data.routes.length > 0) {
             window.currentRouteSteps = data.routes[0].legs[0].steps; window.currentStepIndex = 0; window.isSmartNavActive = true;
@@ -209,8 +227,32 @@ window.checkLocationAndZone = async function() {
                 window.isFirstLocationCheck = false; window.isInCityZone = isCurrentlyInCity;
                 let speedLimit = isCurrentlyInCity ? 50 : 90;
                 if (window.speak) window.speak(`Системи активовано. Пристебніть пасок безпеки. Ми в районі ${place || "невідомо"}. Дозволена швидкість ${speedLimit}.`);
-                return;
+            } else {
+                window.isInCityZone = isCurrentlyInCity; // Оновлюємо статус зони під час їзди
             }
+
+            // ==========================================
+            // [ДОДАНО] ЛОГІКА АВТОГІДА
+            // ==========================================
+            if (window.isAutoTourGuide && place) {
+                let distSinceLastTour = window.lastTourLat ? getDistance(window.currentLat, window.currentLon, window.lastTourLat, window.lastTourLon) : 99999;
+                
+                // Якщо від'їхали на 5 км АБО змінився населений пункт
+                if (distSinceLastTour >= 5000 || window.lastTourPlace !== place) {
+                    window.lastTourLat = window.currentLat;
+                    window.lastTourLon = window.currentLon;
+                    window.lastTourPlace = place;
+                    
+                    if (window.askDusyaAI && window.speak) {
+                        window.askDusyaAI(`Розкажи коротку історичну довідку або один цікавий факт про населений пункт ${place} та місцевість в радіусі 5 км. Дуже коротко, цікаво, 2-3 речення.`).then(text => {
+                            if (window.isAutoTourGuide && !window.speechSynthesis.speaking) {
+                                window.speak("Цікавий факт. " + text);
+                            }
+                        });
+                    }
+                }
+            }
+            // ==========================================
         }
     } catch(e) {}
 };
