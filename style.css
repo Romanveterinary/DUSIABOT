@@ -6,6 +6,18 @@ body {
     overflow: hidden; position: relative; transition: background-color 0.5s ease;
 }
 
+/* ========================================== */
+/* СМУГА ПРОГРЕСУ НАВІГАЦІЇ */
+/* ========================================== */
+#route-progress-container {
+    position: absolute; top: 0; left: 0; width: 100%; height: 8px;
+    background-color: #222; z-index: 100;
+}
+#route-progress-bar {
+    height: 100%; width: 0%; background-color: #00FF00;
+    transition: width 1s linear; box-shadow: 0 0 15px #00FF00;
+}
+
 /* ІНДИКАТОР ІНТЕРНЕТУ */
 #network-indicator {
     position: absolute; top: 25px; left: 25px; width: 16px; height: 16px; border-radius: 50%;
@@ -32,7 +44,7 @@ body {
     100% { transform: translate(-50%, -50%) scale(0); opacity: 0; filter: blur(15px); }
 }
 .blackout { background-color: #000 !important; }
-.blackout #bottom-hud, .blackout #settings-btn, .blackout #network-indicator {
+.blackout #bottom-hud, .blackout #settings-btn, .blackout #network-indicator, .blackout #route-progress-container {
     transition: opacity 1s; opacity: 0 !important; pointer-events: none;
 }
 
@@ -114,9 +126,8 @@ body {
 #hood-line-text { position: absolute; top: -25px; left: 50%; transform: translateX(-50%); color: red; font-weight: bold; background: rgba(0,0,0,0.5); padding: 2px 5px; border-radius: 5px; font-size: 12px; }
 #radar-controls { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 400px; z-index: 503; transition: opacity 0.5s; opacity: 0; }
 
-
 /* ========================================== */
-/* [ДОДАНО] ЕФЕКТИ ДЛЯ МАШИНИ ЧАСУ */
+/* ЕФЕКТИ ДЛЯ МАШИНИ ЧАСУ */
 /* ========================================== */
 .time-warp {
     transform: scaleY(1.5) skewX(-15deg);
